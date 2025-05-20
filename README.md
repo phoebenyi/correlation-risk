@@ -8,33 +8,33 @@ An interactive dashboard built with **Streamlit** and **Jupyter Notebook** to an
 
 ### ✅ Core Capabilities
 
-- **Dynamic Ticker Input** – Add or remove any Yahoo Finance-compatible ticker
-- **Date Range Flexibility** – Analyze from 2010 to present or custom ranges
-- **Correlation matrix export** – CSV download option
-- **Return frequency control** – Daily, Monthly, Yearly
-- **Return type toggle** – Percent change or absolute difference
-- **Overlap logic** – Choose overlapping vs non-overlapping windows
-- **Risk metrics** – Value-at-Risk (VaR), Conditional VaR, Sharpe Ratio (manual or via Riskfolio)
-- **Rolling Correlation Viewer** – Select any pair and visualize time-varying correlation trends
-- **Correlation Highlights** – Quickly identify top positive, negative, and extreme correlations
-- **Portfolio Optimization** – Max Sharpe portfolio optimization with Riskfolio
-- **Drawdown & Rebalancing** – See performance over time with monthly rebalance simulation
-- **Log, Raw, and Normalized Price Views** – For comparing assets of different magnitudes
-- **Ticker Data Availability Audit** – Flags IPOs, delistings, or data gaps
+- **Dynamic Ticker Input** – Instantly add or remove any Yahoo Finance-compatible ticker for live analysis
+- **Flexible Date Range Control** – Analyze as far back as 2010 or narrow to recent periods
+- **Customizable Return Calculations** – Switch between daily, monthly, or yearly data; view raw price differences or percent returns
+- **Overlap Handling** – Choose between overlapping and non-overlapping return windows for YoY analysis
+- **Interactive Price Visualization** – View raw prices, normalized growth (rebased to 100), or log-scaled charts
+- **Rolling Correlation Viewer** – Analyze how correlations between selected pairs evolve over time
+- **Correlation Matrix Analysis** – Exportable heatmaps and dataframes of asset correlations with multiple methods (Pearson, Kendall, Spearman)
+- **Automated Correlation Highlights** – Automatically detect and summarize top positive, negative, and strong correlations
+- **Risk Metrics Dashboard** – Compute VaR, CVaR, and Sharpe ratios per asset (manually or via Riskfolio)
+- **Portfolio Optimization** – Construct a max Sharpe ratio portfolio and view allocation weights
+- **Performance Tracking** – Visualize cumulative return, drawdown, and monthly rebalanced performance
+- **Ticker Data Integrity Audit** – Identify tickers with missing data due to IPOs, delistings, or Yahoo limitations
+- **Export Tools** – One-click download of correlation matrix as CSV for further analysis
 
 ---
 
 ## 🧠 Use Cases
 
-- Identify diversification opportunities in multi-asset portfolios
-- Explore antifragile asset combinations (low correlation)
-- Compare Pearson vs Kendall vs Spearman correlation for different regimes
-- Examine how overlapping data affects statistical significance
-- Analyze global markets with time zone awareness
-- Spot redundancy or diversification gaps in your portfolio
-- Compare correlation regimes across frequencies and transformations
-- Explore optimal asset combinations using quantitative risk-return metrics
-- Investigate data quality for newly listed or delisted stocks
+- Construct and analyze diversified, low-correlation investment portfolios
+- Identify highly correlated assets to reduce redundancy and improve risk-adjusted returns
+- Compare market regimes using different correlation methods (Pearson, Kendall, Spearman)
+- Test impact of overlapping vs non-overlapping return windows on statistical accuracy
+- Evaluate risk across assets with standardized metrics like VaR, CVaR, and Sharpe
+- Optimize asset allocations to maximize Sharpe ratio using historical returns
+- Track how relationships between assets evolve over time via rolling correlation
+- Assess data sufficiency and reliability for newly listed or delisted tickers
+- Benchmark performance against monthly rebalanced portfolio simulations
 
 ---
 
