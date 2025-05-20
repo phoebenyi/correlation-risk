@@ -75,18 +75,22 @@ if st.sidebar.button("🔍 Run Analysis"):
                         "Available To": actual_end,
                         "Requested From": user_start,
                         "Requested To": user_end,
-                        "Reason (likely)": reason
+                        "Reason": reason
                     })
 
-                # Extract clean price series
-                if "Adj Close" in stock.columns:
-                    val = stock["Adj Close"]
-                elif "Close" in stock.columns:
-                    # st.warning(f"{ticker} missing 'Adj Close'. Using 'Close' instead.")
-                    val = stock["Close"]
+                # Extract price series
+                if isinstance(stock.columns, pd.MultiIndex):
+                    try:
+                        val = stock["Close"][ticker].dropna()
+                    except KeyError:
+                        st.warning(f"⚠️ 'Close' prices not found for {ticker}.")
+                        continue
                 else:
-                    st.error(f"{ticker} has no valid price columns.")
-                    continue
+                    if "Close" in stock.columns:
+                        val = stock["Close"]
+                    else:
+                        st.error(f"{ticker} has no valid price columns.")
+                        continue
 
                 if isinstance(val, pd.Series):
                     data[ticker] = val
@@ -105,23 +109,31 @@ if st.sidebar.button("🔍 Run Analysis"):
         if len(data) == 0:
             st.error("❌ No valid data downloaded.")
         else:
-            df = pd.DataFrame(data).dropna()
+            df = pd.DataFrame(data).ffill().dropna()
             # ---------------------------------------------
             # Price History Visualization
             # ---------------------------------------------
 
             st.subheader("📊 Raw Price History Comparison")
             st.write("📉 **Raw Prices** – Actual trading prices. ✅ Useful for valuation, ❌ hard to compare across different price ranges.")
+            st.write("📉 Using raw 'Close' prices (not adjusted for splits/dividends)")
+            st.subheader("📊 Latest Price Data Snapshot")
+            with st.expander("🔍 View Latest Raw Price Table"):
+                st.dataframe(df.tail(10))
             st.line_chart(df)
 
             st.subheader("📊 Normalised Price History Comparison")
             df_norm = df / df.iloc[0] * 100
             st.write("📈 **Normalized Prices** – All lines start at 100. ✅ Great for comparing relative performance, ❌ loses actual price context.")
+            with st.expander("🔍 View Latest Normalized Price Table"):
+                st.dataframe(df_norm.tail(10).round(2))
             st.line_chart(df_norm)
 
             st.subheader("📊 Log Price History Comparison")
             import matplotlib.pyplot as plt
             st.write("📊 **Log Prices** – Price on a logarithmic scale. ✅ Better for visualizing exponential growth, ❌ can distort small moves.")
+            with st.expander("🔍 View Latest Log Price Table"):
+                st.dataframe(df.tail(10))
 
             fig, ax = plt.subplots(figsize=(9, 4))
             df.plot(ax=ax, logy=True)
