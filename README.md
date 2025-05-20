@@ -1,6 +1,6 @@
 # 📈 Financial Correlation & Risk Dashboard
 
-This project provides a powerful, interactive dashboard — both as a **Streamlit web app** and a **Jupyter notebook** — to analyze historical stock correlations, optimize portfolios, and compute key risk metrics.
+An interactive dashboard built with **Streamlit** and **Jupyter Notebook** to analyze cross-asset correlations, assess risk, and optimize portfolios using historical market data.
 
 ---
 
@@ -8,17 +8,19 @@ This project provides a powerful, interactive dashboard — both as a **Streamli
 
 ### ✅ Core Capabilities
 
-- **Dynamic stock selection** – Add/remove tickers on the fly
-- **Flexible date range** – Analyze 3M to 20Y of price data
+- **Dynamic Ticker Input** – Add or remove any Yahoo Finance-compatible ticker
+- **Date Range Flexibility** – Analyze from 2010 to present or custom ranges
+- **Correlation matrix export** – CSV download option
 - **Return frequency control** – Daily, Monthly, Yearly
 - **Return type toggle** – Percent change or absolute difference
 - **Overlap logic** – Choose overlapping vs non-overlapping windows
-- **Risk metrics** – Value-at-Risk (VaR), Conditional VaR, Sharpe Ratio
-- **Rolling correlations** – Time-varying correlation trends
-- **Portfolio optimization** – Max Sharpe portfolio using Riskfolio
-- **Drawdown analysis** – Visualize peak-to-trough losses
-- **Rebalancing simulation** – Monthly rebalanced return tracking
-- **Correlation matrix export** – CSV download option
+- **Risk metrics** – Value-at-Risk (VaR), Conditional VaR, Sharpe Ratio (manual or via Riskfolio)
+- **Rolling Correlation Viewer** – Select any pair and visualize time-varying correlation trends
+- **Correlation Highlights** – Quickly identify top positive, negative, and extreme correlations
+- **Portfolio Optimization** – Max Sharpe portfolio optimization with Riskfolio
+- **Drawdown & Rebalancing** – See performance over time with monthly rebalance simulation
+- **Log, Raw, and Normalized Price Views** – For comparing assets of different magnitudes
+- **Ticker Data Availability Audit** – Flags IPOs, delistings, or data gaps
 
 ---
 
@@ -29,67 +31,71 @@ This project provides a powerful, interactive dashboard — both as a **Streamli
 - Compare Pearson vs Kendall vs Spearman correlation for different regimes
 - Examine how overlapping data affects statistical significance
 - Analyze global markets with time zone awareness
+- Spot redundancy or diversification gaps in your portfolio
+- Compare correlation regimes across frequencies and transformations
+- Explore optimal asset combinations using quantitative risk-return metrics
+- Investigate data quality for newly listed or delisted stocks
 
 ---
 
-## 📦 Requirements
+## 📦 Installation
 
-Install the following dependencies:
+Install required dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> Note: You may also need `cvxopt` for full optimization support:
-> ```bash
-> pip install cvxopt
-> ```
+If you encounter solver issues with Riskfolio optimization, also install:
+
+```bash
+pip install cvxopt
+```
 
 ---
 
+## ▶️ Running the App
 
-## 🖥️ Running the App
-
-### ▶️ Streamlit
+### 🖥 Streamlit Web App
 
 ```bash
 streamlit run app.py
 ```
 
-Open your browser at `http://localhost:8501`
+Then visit `http://localhost:8501`
 
 ---
 
 ### 📓 Jupyter Notebook
 
+Open:
+
 ```bash
 jupyter notebook correlation_analysis.ipynb
 ```
 
-Edit variables like `tickers`, `frequency`, `overlap` manually inside the notebook.
+And manually adjust variables for analysis.
 
 ---
 
 ## ⚠️ Notes
 
-- October returns are automatically excluded due to known options distortion.
-- Fewer than 30 data points will trigger a reliability warning.
-- `Adj Close` is used when available; falls back to `Close` with adjusted prices.
+- **Partial Data Notice**: Stocks with data outside the selected window (e.g. IPOs) will be flagged with a reason and available date range.
+- **Minimum Data Threshold**: If fewer than 30 return points, a warning is shown.
 
 ---
 
-## 🧩 Example Tickers
+## 💡 Example Stocks
 
-These are supported by default:
+Default:
 - `ANET` – Arista Networks
 - `FN` – Fabrinet
-- `ALAB` – Astera Labs
+- `ALAB` – Astera Labs (IPO 2024)
 - `NVDA` – NVIDIA
-
 Feel free to input your own!
 
 ---
 
-## 🛡️ License
+## 📜 License
 
 MIT License
