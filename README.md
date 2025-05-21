@@ -4,6 +4,12 @@ An interactive dashboard built with **Streamlit** and **Jupyter Notebook** to an
 
 ---
 
+## 🌍 Live Demo
+[https://correlation-risk.streamlit.app/](https://correlation-risk.streamlit.app/) — *hosted on Streamlit Cloud*
+> ⚠️ Demo is public — no authentication, so please use sample or non-sensitive data only.
+
+---
+
 ## 🚀 Features
 
 ### ✅ Core Capabilities
