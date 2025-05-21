@@ -109,7 +109,51 @@ if st.sidebar.button("🔍 Run Analysis"):
         if len(data) == 0:
             st.error("❌ No valid data downloaded.")
         else:
-            df = pd.DataFrame(data).ffill().dropna()
+            df = pd.DataFrame(data).ffill()
+            st.write(f"📊 Data range in df: {df.index.min().date()} to {df.index.max().date()}")
+            buffer_prices = io.StringIO()
+            df.to_csv(buffer_prices)
+            buffer_prices.seek(0)
+            st.download_button("⬇️ Download Price Data CSV", data=buffer_prices.getvalue(), file_name="prices.csv", mime="text/csv")
+
+            if freq == "Yearly" and overlap == "No":
+                temp = df.resample("Y").last()
+                returns = temp.pct_change().dropna()
+                st.caption("🧠 Using non-overlapping year-end returns (Excel-style).")
+            elif freq == "Yearly" and overlap == "Yes":
+                returns = df.pct_change(252).dropna()
+            elif freq == "Monthly":
+                temp = df.resample("M").last()
+                returns = temp.pct_change().dropna()
+            else:
+                returns = df.pct_change().dropna()
+
+            # returns.to_csv("debug_returns.csv")
+
+
+            # ---------------------------------------------
+            # Correlation Matrix (pairwise like Excel)
+            # ---------------------------------------------
+            corr = returns.corr(method=corr_type.lower())
+            st.subheader(f"📌 {corr_type} Correlation Matrix")
+            st.caption("📊 Pearson correlation using pairwise complete observations (matches Excel CORREL)")
+            st.dataframe(corr.round(3))
+
+            fig = px.imshow(
+                corr,
+                text_auto=".2f",
+                color_continuous_scale="RdBu_r",
+                aspect="auto",
+                title=f"{corr_type} Correlation Matrix"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # CSV Export
+            buffer = io.StringIO()
+            corr.to_csv(buffer)
+            csv = buffer.getvalue().encode("utf-8")
+            st.download_button("⬇️ Download Correlation Matrix CSV", data=csv, file_name="correlation_matrix.csv", mime="text/csv")
+
             # ---------------------------------------------
             # Price History Visualization
             # ---------------------------------------------
@@ -153,22 +197,22 @@ if st.sidebar.button("🔍 Run Analysis"):
             # ---------------------------------------------
             if freq == "Daily":
                 temp = df
+                returns = temp.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else temp.diff().dropna()
+
             elif freq == "Monthly":
                 temp = df.resample("M").last()
+                returns = temp.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else temp.diff().dropna()
+
             elif freq == "Yearly":
-                temp = df.resample("Y").last()
-
-            if abs_or_pct == "% Change (Relative)":
-                if freq == "Yearly" and overlap == "Yes":
-                    returns = df.pct_change(252).dropna()
+                if overlap == "Yes":
+                    # Use rolling 252-day change on full daily data (not resampled)
+                    returns = df.pct_change(252).dropna() if abs_or_pct == "% Change (Relative)" else df.diff(252).dropna()
                 else:
-                    returns = temp.pct_change().dropna()
-            else:
-                returns = temp.diff().dropna()
+                    temp = df.resample("Y").last()
+                    returns = temp.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else temp.diff().dropna()
 
-            # Warn if data points too few
-            if len(returns) < 30:
-                st.warning("⚠️ Fewer than 30 data points — correlation may be unreliable.")
+            # Optional strict match window (for Excel validation)
+            returns.to_csv("debug_returns.csv")  # Export for Excel comparison
 
             # ---------------------------------------------
             # Correlation Matrix
@@ -252,7 +296,10 @@ if st.sidebar.button("🔍 Run Analysis"):
             # ---------------------------------------------
             if riskfolio_available and len(tickers) > 1:
                 st.subheader("📉 Risk Metrics (VaR, CVaR, Sharpe)")
-                port = rp.Portfolio(returns=returns)
+                returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna(axis=1, how="any").dropna()
+                if len(returns_clean) < 30:
+                    st.warning("⚠️ Fewer than 30 data points — risk metrics may be unreliable.")
+                port = rp.Portfolio(returns=returns_clean)
                 port.assets_stats(method_mu='hist', method_cov='hist')
 
                 # Compute VaR, CVaR, Sharpe
