@@ -6,7 +6,7 @@ An interactive dashboard built with **Streamlit** and **Jupyter Notebook** to an
 
 ## 🌍 Live Demo
 [https://correlation-risk.streamlit.app/](https://correlation-risk.streamlit.app/) — *hosted on Streamlit Cloud*
-> ⚠️ Demo is public — no authentication, so please use sample or non-sensitive data only.
+> ⚠️ Data is pulled from Yahoo Finance (yfinance) compatible ticker for live analysis
 
 ---
 
@@ -14,7 +14,7 @@ An interactive dashboard built with **Streamlit** and **Jupyter Notebook** to an
 
 ### ✅ Core Capabilities
 
-- **Dynamic Ticker Input** – Instantly add or remove any Yahoo Finance-compatible ticker for live analysis
+- **Dynamic Ticker Input** – Instantly add or remove any stocks (Yahoo Finance-compatible ticker) for live analysis
 - **Flexible Date Range Control** – Analyze as far back as 2010 or narrow to recent periods
 - **Customizable Return Calculations** – Switch between daily, monthly, or yearly data; view raw price differences or percent returns
 - **Overlap Handling** – Choose between overlapping and non-overlapping return windows for YoY analysis
