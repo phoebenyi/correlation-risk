@@ -6,7 +6,7 @@ An interactive dashboard built with **Streamlit** and **Jupyter Notebook** to an
 
 ## 🌍 Live Demo
 [https://correlation-risk.streamlit.app/](https://correlation-risk.streamlit.app/) — *hosted on Streamlit Cloud*
-> ⚠️ Data is pulled from Yahoo Finance (yfinance) compatible ticker for live analysis
+> ⚠️ Data is pulled from Yahoo Finance (yfinance) for live analysis
 
 ---
 
