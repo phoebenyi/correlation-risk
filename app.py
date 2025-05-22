@@ -29,8 +29,11 @@ user_input = st.sidebar.text_input("Enter Tickers (comma-separated)", value=",".
 tickers = [t.strip().upper() for t in user_input.split(",") if t.strip()]
 
 # Date range
-start = st.sidebar.date_input("Start Date", pd.to_datetime("2010-01-01"))
-end = st.sidebar.date_input("End Date", pd.to_datetime("2024-12-31"))
+import datetime
+today = datetime.date.today()
+default_start = today - pd.DateOffset(years=5)
+start = st.sidebar.date_input("Start Date", value=default_start.date(), min_value=datetime.date(2000, 1, 1), max_value=today)
+end = st.sidebar.date_input("End Date", value=today, min_value=datetime.date(2000, 1, 1), max_value=today)
 threshold_days = st.sidebar.slider(
     "⚙️ Tolerance for start/end mismatch (days)",
     0, 10, 3,
@@ -162,9 +165,9 @@ if st.sidebar.button("🔍 Run Analysis"):
                 returns = df.pct_change() if abs_or_pct == "% Change (Relative)" else df.diff()
                 returns = returns.dropna(how="all")
 
-            elif freq == "Monthly":
-                temp = df.resample("M").last()
-                returns = temp.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else temp.diff().dropna()
+            if freq == "Monthly":
+                monthly_prices = df.ffill().resample("M").last().dropna(how="any")
+                returns = monthly_prices.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else monthly_prices.diff().dropna()
 
             elif freq == "Yearly":
                 if overlap == "Yes":
@@ -172,6 +175,7 @@ if st.sidebar.button("🔍 Run Analysis"):
                 else:
                     temp = df.resample("Y").last()
                     returns = temp.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else temp.diff().dropna()
+
 
             # ---------------------------------------------
             # Correlation Matrix
@@ -273,16 +277,17 @@ if st.sidebar.button("🔍 Run Analysis"):
                 returns_clean = returns.replace([np.inf, -np.inf], np.nan)
 
                 # Drop columns (assets) that are mostly NaNs — but keep if they have enough data
-                min_valid_obs = 30
-                returns_clean = returns_clean.loc[:, returns_clean.notna().sum() > min_valid_obs]
+                min_valid_obs = 3  # Lower this threshold to allow monthly data for 1-year
 
-                # Drop rows where remaining assets have missing values
+                returns_clean = returns.replace([np.inf, -np.inf], np.nan)
+                returns_clean = returns_clean.loc[:, returns_clean.notna().sum() >= min_valid_obs]
                 returns_clean = returns_clean.dropna()
-                
-                if len(returns_clean) < 30:
-                    st.warning("⚠️ Fewer than 30 data points — risk metrics may be unreliable.")
-                port = rp.Portfolio(returns=returns_clean)
-                port.assets_stats(method_mu='hist', method_cov='hist')
+
+                if returns_clean.shape[1] < 2 or returns_clean.shape[0] < 3:
+                    st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio. Need ≥ 2 assets and ≥ 3 return periods.")
+                else:
+                    port = rp.Portfolio(returns=returns_clean)
+                    port.assets_stats(method_mu='hist', method_cov='hist')
 
                 # Compute VaR, CVaR, Sharpe
                 def get_risk_metrics(returns, alpha=0.05, rf=0.0):
