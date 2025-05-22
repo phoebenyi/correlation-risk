@@ -74,6 +74,8 @@ Then visit `http://localhost:8501`
 
 ### 📓 Jupyter Notebook
 
+> ⚠️ Streamlit app.py is updated but the Jupyter notebook is not updated.
+
 Open:
 
 ```bash
