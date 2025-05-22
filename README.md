@@ -1,6 +1,6 @@
 # 📈 Financial Correlation & Risk Dashboard
 
-An interactive dashboard built with **Streamlit** and **Jupyter Notebook** to analyze cross-asset correlations, assess risk, and optimize portfolios using historical market data.
+An interactive dashboard built with **Streamlit** to analyze cross-asset correlations, assess risk, and optimize portfolios using historical market data.
 
 ---
 
@@ -74,7 +74,7 @@ Then visit `http://localhost:8501`
 
 ### 📓 Jupyter Notebook
 
-> ⚠️ Streamlit app.py is updated but the Jupyter notebook is not updated.
+> ⚠️ The Jupyter notebook is not updated as it is only used for testing purposes. Refer to Streamlit app.py for the most up to date code logic and features.
 
 Open:
 
@@ -82,7 +82,7 @@ Open:
 jupyter notebook correlation_analysis.ipynb
 ```
 
-And manually adjust variables for analysis.
+Manually adjust variables for analysis and code for testing.
 
 ---
 
