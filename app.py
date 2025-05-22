@@ -110,24 +110,12 @@ if st.sidebar.button("🔍 Run Analysis"):
         if len(data) == 0:
             st.error("❌ No valid data downloaded.")
         else:
-            df = pd.DataFrame(data).ffill()
+            df = pd.DataFrame(data)
             st.write(f"📊 Data range in df: {df.index.min().date()} to {df.index.max().date()}")
             buffer_prices = io.StringIO()
             df.to_csv(buffer_prices)
             buffer_prices.seek(0)
             st.download_button("⬇️ Download Price Data CSV", data=buffer_prices.getvalue(), file_name="prices.csv", mime="text/csv")
-
-            if freq == "Yearly" and overlap == "No":
-                temp = df.resample("Y").last()
-                returns = temp.pct_change().dropna()
-                st.caption("🧠 Using non-overlapping year-end returns (Excel-style).")
-            elif freq == "Yearly" and overlap == "Yes":
-                returns = df.pct_change(252).dropna()
-            elif freq == "Monthly":
-                temp = df.resample("M").last()
-                returns = temp.pct_change().dropna()
-            else:
-                returns = df.pct_change()
 
             # ---------------------------------------------
             # Price History Visualization
@@ -171,8 +159,8 @@ if st.sidebar.button("🔍 Run Analysis"):
             # Return Calculation based on frequency & type
             # ---------------------------------------------
             if freq == "Daily":
-                temp = df
-                returns = temp.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else temp.diff().dropna()
+                returns = df.pct_change() if abs_or_pct == "% Change (Relative)" else df.diff()
+                returns = returns.dropna(how="all")
 
             elif freq == "Monthly":
                 temp = df.resample("M").last()
@@ -180,7 +168,6 @@ if st.sidebar.button("🔍 Run Analysis"):
 
             elif freq == "Yearly":
                 if overlap == "Yes":
-                    # Use rolling 252-day change on full daily data (not resampled)
                     returns = df.pct_change(252).dropna() if abs_or_pct == "% Change (Relative)" else df.diff(252).dropna()
                 else:
                     temp = df.resample("Y").last()
@@ -189,20 +176,15 @@ if st.sidebar.button("🔍 Run Analysis"):
             # ---------------------------------------------
             # Correlation Matrix
             # ---------------------------------------------
-            returns = df.pct_change()
-
             tickers = returns.columns.tolist()
             pairwise_corr = pd.DataFrame(index=tickers, columns=tickers, dtype=float)
 
             for i, j in itertools.combinations(tickers, 2):
-                x = returns[i]
-                y = returns[j]
-
-                # Temporary DataFrame to find overlapping non-NA pairs
-                pair_df = pd.concat([x, y], axis=1, keys=[i, j]).dropna()
-
-                if len(pair_df) > 1:
-                    corr_val = pair_df[i].corr(pair_df[j], method=corr_type.lower())
+                x = returns[i].dropna()
+                y = returns[j].dropna()
+                overlap = x.index.intersection(y.index)
+                if len(overlap) > 1:
+                    corr_val = x[overlap].corr(y[overlap], method=corr_type.lower())
                     pairwise_corr.loc[i, j] = corr_val
                     pairwise_corr.loc[j, i] = corr_val
 
