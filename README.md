@@ -100,6 +100,7 @@ Default:
 - `FN` – Fabrinet
 - `ALAB` – Astera Labs (IPO 2024)
 - `NVDA` – NVIDIA
+
 Feel free to input your own!
 
 ---
