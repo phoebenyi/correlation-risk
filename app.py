@@ -45,7 +45,7 @@ freq = st.sidebar.selectbox("Return Frequency", ["Daily", "Monthly", "Yearly"])
 abs_or_pct = st.sidebar.radio("Return Type", ["% Change (Relative)", "Price Difference (Absolute)"])
 
 # Overlap logic for YoY
-overlap = st.sidebar.selectbox("Overlap Windows (for Yearly)?", ["Yes", "No"])
+overlap_window = st.sidebar.selectbox("Overlap Windows (for Yearly)?", ["Yes", "No"])
 
 # Correlation method
 corr_type = st.sidebar.selectbox("Correlation Method", ["Pearson", "Kendall", "Spearman"])
@@ -178,12 +178,13 @@ if st.sidebar.button("🔍 Run Analysis"):
                 returns = monthly_prices.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else monthly_prices.diff().dropna()
 
             elif freq == "Yearly":
-                if overlap == "Yes":
+                yearly_prices = df.ffill().resample("YE").last()
+                if overlap_window == "Yes":
+                    # Overlapping: use rolling 252-day window (only if data is daily and full)
                     returns = df.pct_change(252).dropna() if abs_or_pct == "% Change (Relative)" else df.diff(252).dropna()
                 else:
-                    temp = df.resample("Y").last()
-                    returns = temp.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else temp.diff().dropna()
-
+                    # Non-overlapping: strictly resample by calendar year end
+                    returns = yearly_prices.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else yearly_prices.diff().dropna()
 
             # ---------------------------------------------
             # Correlation Matrix
@@ -265,7 +266,8 @@ if st.sidebar.button("🔍 Run Analysis"):
                 t1, t2 = pair
                 st.subheader(f"🔁 Rolling Correlation: {t1} vs {t2}")
                 try:
-                    roll_corr = returns[t1].rolling(window).corr(returns[t2])
+                    aligned = returns[[t1, t2]].dropna()
+                    roll_corr = aligned[t1].rolling(window).corr(aligned[t2])
                     st.line_chart(roll_corr.dropna())
                 except Exception as e:
                     st.error(f"Rolling correlation failed: {e}")
@@ -274,15 +276,24 @@ if st.sidebar.button("🔍 Run Analysis"):
             # Risk Metrics and Portfolio Optimization
             # ---------------------------------------------
             if riskfolio_available and len(tickers) > 1:
+
+                def get_risk_metrics(returns, alpha=0.05, rf=0.0):
+                        metrics = {}
+                        for col in returns.columns:
+                            r = returns[col].dropna()
+                            if len(r) == 0:
+                                continue  # skip this asset
+                            var = np.percentile(r, 100 * alpha)
+                            cvar = r[r <= var].mean()
+                            sharpe = (r.mean() - rf) / r.std() * np.sqrt(252)
+                            metrics[col] = {"VaR_0.05": var, "CVaR_0.05": cvar, "Sharpe": sharpe}
+                        return pd.DataFrame(metrics).T
+                
                 st.subheader("📉 Risk Metrics (VaR, CVaR, Sharpe)")
                 returns_clean = returns.replace([np.inf, -np.inf], np.nan)
-
-                # Drop columns (assets) that are mostly NaNs — but keep if they have enough data
-                min_valid_obs = 3  # Lower this threshold to allow monthly data for 1-year
-
-                returns_clean = returns.replace([np.inf, -np.inf], np.nan)
-                returns_clean = returns_clean.loc[:, returns_clean.notna().sum() >= min_valid_obs]
-                returns_clean = returns_clean.dropna()
+                min_valid_obs = 3
+                returns_clean = returns_clean.dropna(axis=1, thresh=min_valid_obs)  # drop columns with too few valid obs
+                returns_clean = returns_clean.dropna()  # drop any remaining NaN rows
 
                 if returns_clean.shape[1] < 2 or returns_clean.shape[0] < 3:
                     st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio. Need ≥ 2 assets and ≥ 3 return periods.")
@@ -290,40 +301,30 @@ if st.sidebar.button("🔍 Run Analysis"):
                     port = rp.Portfolio(returns=returns_clean)
                     port.assets_stats(method_mu='hist', method_cov='hist')
 
-                # Compute VaR, CVaR, Sharpe
-                def get_risk_metrics(returns, alpha=0.05, rf=0.0):
-                    metrics = {}
-                    for col in returns.columns:
-                        r = returns[col].dropna()
-                        var = np.percentile(r, 100 * alpha)
-                        cvar = r[r <= var].mean()
-                        sharpe = (r.mean() - rf) / r.std() * np.sqrt(252)
-                        metrics[col] = {"VaR_0.05": var, "CVaR_0.05": cvar, "Sharpe": sharpe}
-                    return pd.DataFrame(metrics).T
+                    # Compute VaR, CVaR, Sharpe
+                    risk = get_risk_metrics(returns_clean)
+                    st.dataframe(risk.round(4))
 
-                risk = get_risk_metrics(returns)
-                st.dataframe(risk.round(4))
+                    st.subheader("🧠 Portfolio Optimization (Max Sharpe)")
+                    w = port.optimization(model="Classic", rm="MV", obj="Sharpe", hist=True)
+                    st.dataframe(w.T.round(4))
 
-                st.subheader("🧠 Portfolio Optimization (Max Sharpe)")
-                w = port.optimization(model="Classic", rm="MV", obj="Sharpe", hist=True)
-                st.dataframe(w.T.round(4))
+                    port_weights = w[w > 0].index.tolist()
+                    selected_weights = w.loc[port_weights].values.flatten()
 
-                port_weights = w[w > 0].index.tolist()
-                selected_weights = w.loc[port_weights].values.flatten()
+                    weighted_returns = returns[port_weights].mul(selected_weights, axis=1).sum(axis=1)
+                    cumulative_returns = (1 + weighted_returns).cumprod()
 
-                weighted_returns = returns[port_weights].mul(selected_weights, axis=1).sum(axis=1)
-                cumulative_returns = (1 + weighted_returns).cumprod()
+                    st.subheader("📈 Optimized Portfolio Cumulative Returns")
+                    st.line_chart(cumulative_returns)
 
-                st.subheader("📈 Optimized Portfolio Cumulative Returns")
-                st.line_chart(cumulative_returns)
+                    st.subheader("📉 Drawdown Chart")
+                    drawdown = (cumulative_returns - cumulative_returns.cummax()) / cumulative_returns.cummax()
+                    st.line_chart(drawdown)
 
-                st.subheader("📉 Drawdown Chart")
-                drawdown = (cumulative_returns - cumulative_returns.cummax()) / cumulative_returns.cummax()
-                st.line_chart(drawdown)
-
-                st.subheader("🔁 Monthly Rebalanced Portfolio Returns")
-                rebalance_returns = weighted_returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
-                st.line_chart((1 + rebalance_returns).cumprod())
+                    st.subheader("🔁 Monthly Rebalanced Portfolio Returns")
+                    rebalance_returns = weighted_returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
+                    st.line_chart((1 + rebalance_returns).cumprod())
 
             elif not riskfolio_available:
                 st.warning("Install `riskfolio-lib` to enable risk metrics.")
