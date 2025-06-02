@@ -84,23 +84,9 @@ Not with standard formulas. You would need:
 
 ---
 
-## ✅ What We Recommend
+## ✅ Recommended
 
 - Use **Streamlit's correlation output as ground truth**
 - If Excel output is needed for presentation:
   - Use values exported from Streamlit
   - Or ask for an Excel version with **per-pair aligned helper sheets** (we can generate this)
-
----
-
-## 📁 Files
-
-| File | Description |
-|------|-------------|
-| `final_excel_streamlit_match_cell_based.xlsx` | Cell-based CORREL formulas using aligned returns |
-| `streamlit_app.py` | The Streamlit logic that correctly computes per-pair correlation |
-| `correlation_comparison.md` | This documentation |
-
----
-
-For questions or audit support, contact [Your Name].
