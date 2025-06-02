@@ -53,6 +53,14 @@ corr_type = st.sidebar.selectbox("Correlation Method", ["Pearson", "Kendall", "S
 # Rolling correlation
 window = st.sidebar.slider("Rolling Correlation Window (days)", 20, 180, 60)
 
+rolling_pairs = [(a, b) for i, a in enumerate(tickers) for b in tickers[i+1:]] if len(tickers) >= 2 else []
+pair = st.sidebar.selectbox(
+    "🔁 Choose Pair for Rolling Correlation",
+    rolling_pairs,
+    format_func=lambda x: f"{x[0]} vs {x[1]}",
+    key="rolling_pair",
+    help="Select any pair of stocks to see how their correlation changes over time"
+)
 # ---------------------------------------------
 # Begin Analysis
 # ---------------------------------------------
@@ -253,14 +261,7 @@ if st.sidebar.button("🔍 Run Analysis"):
             # ---------------------------------------------
             # Rolling Correlation — dynamic pair selector
             # ---------------------------------------------
-            if len(tickers) >= 2:
-                st.sidebar.markdown("### 🔁 Select Pair for Rolling Correlation")
-                pair = st.sidebar.selectbox(
-                    "Choose pair to plot",
-                    [(a, b) for i, a in enumerate(tickers) for b in tickers[i+1:]],
-                    format_func=lambda x: f"{x[0]} vs {x[1]}"
-                )
-
+            if len(tickers) >= 2 and pair and pair[0] in returns.columns and pair[1] in returns.columns:
                 t1, t2 = pair
                 st.subheader(f"🔁 Rolling Correlation: {t1} vs {t2}")
                 try:
