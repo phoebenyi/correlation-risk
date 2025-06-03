@@ -173,18 +173,30 @@ if st.sidebar.button("🔍 Run Analysis"):
                 returns = df.pct_change() if abs_or_pct == "% Change (Relative)" else df.diff()
                 returns = returns.dropna(how="all")
 
-            if freq == "Monthly":
-                monthly_prices = df.ffill().resample("M").last().dropna(how="any")
-                returns = monthly_prices.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else monthly_prices.diff().dropna()
+            elif freq == "Monthly":
+                monthly_prices = df.ffill().resample("M").last()
+                if abs_or_pct == "% Change (Relative)":
+                    returns = pd.concat([monthly_prices[col].pct_change() for col in monthly_prices.columns], axis=1)
+                else:
+                    returns = pd.concat([monthly_prices[col].diff() for col in monthly_prices.columns], axis=1)
+                returns.columns = monthly_prices.columns
+
 
             elif freq == "Yearly":
-                yearly_prices = df.ffill().resample("YE").last()
                 if overlap_window == "Yes":
-                    # Overlapping: use rolling 252-day window (only if data is daily and full)
-                    returns = df.pct_change(252).dropna() if abs_or_pct == "% Change (Relative)" else df.diff(252).dropna()
+                    if abs_or_pct == "% Change (Relative)":
+                        returns = pd.concat([df[col].pct_change(252) for col in df.columns], axis=1)
+                    else:
+                        returns = pd.concat([df[col].diff(252) for col in df.columns], axis=1)
+                    returns.columns = df.columns
                 else:
-                    # Non-overlapping: strictly resample by calendar year end
-                    returns = yearly_prices.pct_change().dropna() if abs_or_pct == "% Change (Relative)" else yearly_prices.diff().dropna()
+                    yearly_prices = df.ffill().resample("YE").last()
+                    if abs_or_pct == "% Change (Relative)":
+                        returns = pd.concat([yearly_prices[col].pct_change() for col in yearly_prices.columns], axis=1)
+                    else:
+                        returns = pd.concat([yearly_prices[col].diff() for col in yearly_prices.columns], axis=1)
+                    returns.columns = yearly_prices.columns
+
 
             # ---------------------------------------------
             # Correlation Matrix
