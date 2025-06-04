@@ -42,7 +42,7 @@ threshold_days = st.sidebar.slider(
 
 # Return frequency and type
 freq = st.sidebar.selectbox("Return Frequency", ["Daily", "Monthly", "Yearly"])
-abs_or_pct = st.sidebar.radio("Return Type", ["% Change (Relative)", "Price Difference (Absolute)"])
+abs_or_pct = st.sidebar.radio("Return Type", ["% Change (Relative)", "Price (Absolute)"])
 
 # Overlap logic for YoY
 overlap_window = st.sidebar.selectbox("Overlap Windows (for Yearly)?", ["Yes", "No"])
@@ -147,24 +147,23 @@ if st.sidebar.button("🔍 Run Analysis"):
                 st.dataframe(df_norm.tail(10).round(2))
             st.line_chart(df_norm)
 
-            st.subheader("📊 Log Price History Comparison")
-            import matplotlib.pyplot as plt
-            st.write("📊 **Log Prices** – Price on a logarithmic scale. ✅ Better for visualizing exponential growth, ❌ can distort small moves.")
-            with st.expander("🔍 View Latest Log Price Table"):
-                st.dataframe(df.tail(10))
-
-            fig, ax = plt.subplots(figsize=(9, 4))
-            df.plot(ax=ax, logy=True)
-            ax.set_title("Log Price Chart")
-            ax.grid(True)
-            ax.legend(
-                loc="upper center",
-                bbox_to_anchor=(0.5, -0.3),
-                ncol=min(4, len(df.columns)),
-                frameon=False,
-                fontsize=8
-            )
-            st.pyplot(fig, clear_figure=True)
+            # st.subheader("📊 Log Price History Comparison")
+            # import matplotlib.pyplot as plt
+            # st.write("📊 **Log Prices** – Price on a logarithmic scale. ✅ Better for visualizing exponential growth, ❌ can distort small moves.")
+            # with st.expander("🔍 View Latest Log Price Table"):
+            #     st.dataframe(df.tail(10))
+            # fig, ax = plt.subplots(figsize=(9, 4))
+            # df.plot(ax=ax, logy=True)
+            # ax.set_title("Log Price Chart")
+            # ax.grid(True)
+            # ax.legend(
+            #     loc="upper center",
+            #     bbox_to_anchor=(0.5, -0.3),
+            #     ncol=min(4, len(df.columns)),
+            #     frameon=False,
+            #     fontsize=8
+            # )
+            # st.pyplot(fig, clear_figure=True)
 
             # ---------------------------------------------
             # Return Calculation based on frequency & type
