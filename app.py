@@ -1,5 +1,6 @@
 import streamlit as st
 from supabase import create_client
+from postgrest import SyncPostgrestClient
 import pandas as pd
 import yfinance as yf
 # import seaborn as sns
@@ -104,9 +105,11 @@ if "user" in st.session_state:
             tickers_list = [t.strip().upper() for t in new_tickers.split(",") if t.strip()]
             if uid:
                 try:
-                    # Create a new client using the logged-in user's token
-                    authed_client = create_client(SUPABASE_URL, SUPABASE_KEY, options={"global": {"headers": {"Authorization": f"Bearer {token}"}}})
-
+                    authed_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+                    authed_client.postgrest = SyncPostgrestClient(
+                        f"{SUPABASE_URL}/rest/v1",
+                        headers={"Authorization": f"Bearer {token}"}
+                    )
                     response = authed_client.table("groups").insert({
                         "user_id": uid,
                         "group_name": new_name,
