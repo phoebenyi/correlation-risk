@@ -50,7 +50,8 @@ if st.sidebar.button(auth_action):
                 else:
                     st.session_state["user"] = {
                         "id": auth_result.user.id,
-                        "access_token": session.access_token
+                        "access_token": session.access_token,
+                        "email": auth_result.user.email
                     }
                     st.sidebar.success("✅ Logged in!")
                     st.rerun()
@@ -75,8 +76,7 @@ if "user" in st.session_state:
     if uid and token:
         st.sidebar.success("✅ Logged in successfully!")
         try:
-            email_info = supabase.auth.get_user()
-            email = email_info.user.email if email_info and email_info.user else "Unknown"
+            email = user.get("email", "Unknown")
             st.sidebar.markdown(f"**Logged in as:** {email}👤")
         except Exception:
             st.sidebar.warning("⚠️ Failed to retrieve user email.")
@@ -109,7 +109,7 @@ if "user" in st.session_state:
                         "group_name": new_name,
                         "tickers": tickers_list,
                         "is_shared": shared
-                    }).execute(headers={"Authorization": f"Bearer {token}"})
+                    }).execute()
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Failed to create group: {e}")
@@ -124,10 +124,10 @@ if "user" in st.session_state:
                 supabase.table("groups").update({
                     "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
                     "is_shared": share_toggle
-                }).eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
+                }).eq("id", group_lookup[selected_group]["id"]).execute()
                 st.rerun()
             if st.button("❌ Delete Group"):
-                supabase.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
+                supabase.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute()
                 st.rerun()
 else:
     st.sidebar.info("Please log in to manage groups.")
