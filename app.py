@@ -68,50 +68,57 @@ if st.sidebar.button("🔍 Run Analysis"):
     with st.spinner("Fetching and analyzing data..."):
         data = {}
         incomplete_data_notes = []
-        for ticker in tickers:
-            st.write(f"📥 Downloading {ticker}...")
-            stock = yf.download(ticker, start=start, end=end, group_by="column", auto_adjust=True)
+        with st.status("📥 Downloading data...", expanded=True) as status:
+            failed = []
+            for ticker in tickers:
+                stock = yf.download(ticker, start=start, end=end, group_by="column", auto_adjust=True)
 
-            if not stock.empty:
-                # Check if the date range is incomplete
-                actual_start = stock.index.min().date()
-                actual_end = stock.index.max().date()
-                user_start = pd.to_datetime(start).date()
-                user_end = pd.to_datetime(end).date()
+                if not stock.empty:
+                    # Check if the date range is incomplete
+                    actual_start = stock.index.min().date()
+                    actual_end = stock.index.max().date()
+                    user_start = pd.to_datetime(start).date()
+                    user_end = pd.to_datetime(end).date()
 
-                if (actual_start - user_start).days > threshold_days or (user_end - actual_end).days > threshold_days:
-                    reason = "IPO, delisting, or missing Yahoo data"
-                    incomplete_data_notes.append({
-                        "Ticker": ticker,
-                        "Available From": actual_start,
-                        "Available To": actual_end,
-                        "Requested From": user_start,
-                        "Requested To": user_end,
-                        "Reason": reason
-                    })
+                    if (actual_start - user_start).days > threshold_days or (user_end - actual_end).days > threshold_days:
+                        reason = "IPO, delisting, or missing Yahoo data"
+                        incomplete_data_notes.append({
+                            "Ticker": ticker,
+                            "Available From": actual_start,
+                            "Available To": actual_end,
+                            "Requested From": user_start,
+                            "Requested To": user_end,
+                            "Reason": reason
+                        })
 
-                # Extract price series
-                if isinstance(stock.columns, pd.MultiIndex):
-                    try:
-                        val = stock["Close"][ticker].dropna()
-                    except KeyError:
-                        st.warning(f"⚠️ 'Close' prices not found for {ticker}.")
-                        continue
-                else:
-                    if "Close" in stock.columns:
-                        val = stock["Close"]
+                    # Extract price series
+                    if isinstance(stock.columns, pd.MultiIndex):
+                        try:
+                            val = stock["Close"][ticker].dropna()
+                        except KeyError:
+                            st.warning(f"⚠️ 'Close' prices not found for {ticker}.")
+                            failed.append(ticker)
+                            continue
                     else:
-                        st.error(f"{ticker} has no valid price columns.")
-                        continue
+                        if "Close" in stock.columns:
+                            val = stock["Close"]
+                        else:
+                            st.error(f"{ticker} has no valid price columns.")
+                            failed.append(ticker)
+                            continue
 
-                if isinstance(val, pd.Series):
-                    data[ticker] = val
-                elif isinstance(val, pd.DataFrame) and val.shape[1] == 1:
-                    data[ticker] = val.iloc[:, 0]
+                    if isinstance(val, pd.Series):
+                        data[ticker] = val
+                    elif isinstance(val, pd.DataFrame) and val.shape[1] == 1:
+                        data[ticker] = val.iloc[:, 0]
+                    else:
+                        st.error(f"{ticker} has invalid format. Skipping.")
+                        failed.append(ticker)
                 else:
-                    st.error(f"{ticker} has invalid format. Skipping.")
-            else:
-                st.error(f"{ticker} returned no data.")
+                    st.error(f"{ticker} returned no data.")
+                    failed.append(ticker)
+            status.update(label=f"✅ Download complete. ({len(tickers) - len(failed)} success, {len(failed)} failed)", state="complete")
+
         if incomplete_data_notes:
             st.markdown("### ⚠️ Some stocks have limited data")
             with st.expander("Click to view details"):
@@ -141,7 +148,7 @@ if st.sidebar.button("🔍 Run Analysis"):
             st.line_chart(df)
 
             st.subheader("📊 Normalised Price History Comparison")
-            df_norm = df / df.iloc[0] * 100
+            df_norm = df.apply(lambda x: x / x.dropna().iloc[0] * 100 if x.dropna().shape[0] > 0 else x)
             st.write("📈 **Normalized Prices** – All lines start at 100. ✅ Great for comparing relative performance, ❌ loses actual price context.")
             with st.expander("🔍 View Latest Normalized Price Table"):
                 st.dataframe(df_norm.tail(10).round(2))
@@ -246,7 +253,9 @@ if st.sidebar.button("🔍 Run Analysis"):
             st.dataframe(strong_corr.reset_index(drop=True).round(3))
 
             st.subheader(f"📌 {corr_type} Correlation Matrix")
-            st.dataframe(corr.round(3))
+
+            # correlation matrix table commented out to avoid repetitive display
+            # st.dataframe(corr.round(3))
 
             fig = px.imshow(
             corr,
@@ -282,63 +291,67 @@ if st.sidebar.button("🔍 Run Analysis"):
                     st.line_chart(roll_corr.dropna())
                 except Exception as e:
                     st.error(f"Rolling correlation failed: {e}")
-
-            # ---------------------------------------------
-            # Risk Metrics and Portfolio Optimization
-            # ---------------------------------------------
-            if riskfolio_available and len(tickers) > 1:
-
-                def get_risk_metrics(returns, alpha=0.05, rf=0.0):
-                        metrics = {}
-                        for col in returns.columns:
-                            r = returns[col].dropna()
-                            if len(r) == 0:
-                                continue  # skip this asset
-                            var = np.percentile(r, 100 * alpha)
-                            cvar = r[r <= var].mean()
-                            sharpe = (r.mean() - rf) / r.std() * np.sqrt(252)
-                            metrics[col] = {"VaR_0.05": var, "CVaR_0.05": cvar, "Sharpe": sharpe}
-                        return pd.DataFrame(metrics).T
-                
-                st.subheader("📉 Risk Metrics (VaR, CVaR, Sharpe)")
-                returns_clean = returns.replace([np.inf, -np.inf], np.nan)
-                min_valid_obs = 3
-                returns_clean = returns_clean.dropna(axis=1, thresh=min_valid_obs)  # drop columns with too few valid obs
-                returns_clean = returns_clean.dropna()  # drop any remaining NaN rows
-
-                if returns_clean.shape[1] < 2 or returns_clean.shape[0] < 3:
-                    st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio. Need ≥ 2 assets and ≥ 3 return periods.")
-                else:
-                    port = rp.Portfolio(returns=returns_clean)
-                    port.assets_stats(method_mu='hist', method_cov='hist')
-
-                    # Compute VaR, CVaR, Sharpe
-                    risk = get_risk_metrics(returns_clean)
-                    st.dataframe(risk.round(4))
-
-                    st.subheader("🧠 Portfolio Optimization (Max Sharpe)")
-                    w = port.optimization(model="Classic", rm="MV", obj="Sharpe", hist=True)
-                    st.dataframe(w.T.round(4))
-
-                    port_weights = w[w > 0].index.tolist()
-                    selected_weights = w.loc[port_weights].values.flatten()
-
-                    weighted_returns = returns[port_weights].mul(selected_weights, axis=1).sum(axis=1)
-                    cumulative_returns = (1 + weighted_returns).cumprod()
-
-                    st.subheader("📈 Optimized Portfolio Cumulative Returns")
-                    st.line_chart(cumulative_returns)
-
-                    st.subheader("📉 Drawdown Chart")
-                    drawdown = (cumulative_returns - cumulative_returns.cummax()) / cumulative_returns.cummax()
-                    st.line_chart(drawdown)
-
-                    st.subheader("🔁 Monthly Rebalanced Portfolio Returns")
-                    rebalance_returns = weighted_returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
-                    st.line_chart((1 + rebalance_returns).cumprod())
-
-            elif not riskfolio_available:
-                st.warning("Install `riskfolio-lib` to enable risk metrics.")
     st.success("✅ Analysis complete!")
 else:
     st.info("👈 Select settings on the left and click 'Run Analysis'.")
+
+            # REMOVED riskfolio-lib section as it is irrelevant to the current task
+            # ---------------------------------------------
+            # Risk Metrics and Portfolio Optimization
+            # ---------------------------------------------
+            # if riskfolio_available and len(tickers) > 1:
+
+            #     def get_risk_metrics(returns, alpha=0.05, rf=0.0):
+            #             metrics = {}
+            #             for col in returns.columns:
+            #                 r = returns[col].dropna()
+            #                 if len(r) == 0:
+            #                     continue  # skip this asset
+            #                 var = np.percentile(r, 100 * alpha)
+            #                 cvar = r[r <= var].mean()
+            #                 sharpe = (r.mean() - rf) / r.std() * np.sqrt(252)
+            #                 metrics[col] = {"VaR_0.05": var, "CVaR_0.05": cvar, "Sharpe": sharpe}
+            #             return pd.DataFrame(metrics).T
+                
+            #     st.subheader("📉 Risk Metrics (VaR, CVaR, Sharpe)")
+            #     returns_clean = returns.replace([np.inf, -np.inf], np.nan)
+            #     min_valid_obs = 3
+            #     returns_clean = returns_clean.dropna(axis=1, thresh=min_valid_obs)  # drop columns with too few valid obs
+            #     returns_clean = returns_clean.dropna()  # drop any remaining NaN rows
+
+            #     if returns_clean.shape[1] < 2 or returns_clean.shape[0] < 3:
+            #         st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio. Need ≥ 2 assets and ≥ 3 return periods.")
+            #     else:
+            #         port = rp.Portfolio(returns=returns_clean)
+            #         port.assets_stats(method_mu='hist', method_cov='hist')
+
+            #         # Compute VaR, CVaR, Sharpe
+            #         risk = get_risk_metrics(returns_clean)
+            #         st.dataframe(risk.round(4))
+
+            #         st.subheader("🧠 Portfolio Optimization (Max Sharpe)")
+            #         w = port.optimization(model="Classic", rm="MV", obj="Sharpe", hist=True)
+            #         st.dataframe(w.T.round(4))
+
+            #         port_weights = w[w > 0].index.tolist()
+            #         selected_weights = w.loc[port_weights].values.flatten()
+
+            #         weighted_returns = returns[port_weights].mul(selected_weights, axis=1).sum(axis=1)
+            #         cumulative_returns = (1 + weighted_returns).cumprod()
+
+            #         st.subheader("📈 Optimized Portfolio Cumulative Returns")
+            #         st.line_chart(cumulative_returns)
+
+            #         st.subheader("📉 Drawdown Chart")
+            #         drawdown = (cumulative_returns - cumulative_returns.cummax()) / cumulative_returns.cummax()
+            #         st.line_chart(drawdown)
+
+            #         st.subheader("🔁 Monthly Rebalanced Portfolio Returns")
+            #         rebalance_returns = weighted_returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
+            #         st.line_chart((1 + rebalance_returns).cumprod())
+
+            # elif not riskfolio_available:
+            #     st.warning("Install `riskfolio-lib` to enable risk metrics.")
+#     st.success("✅ Analysis complete!")
+# else:
+#     st.info("👈 Select settings on the left and click 'Run Analysis'.")
