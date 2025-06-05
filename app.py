@@ -1,4 +1,5 @@
 import streamlit as st
+from supabase import create_client
 import pandas as pd
 import yfinance as yf
 # import seaborn as sns
@@ -7,6 +8,11 @@ import io
 import plotly.express as px
 import numpy as np
 import itertools
+
+# Securely load from .streamlit/secrets.toml
+SUPABASE_URL = st.secrets["supabase"]["url"]
+SUPABASE_KEY = st.secrets["supabase"]["key"]
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 try:
     import riskfolio as rp
@@ -22,11 +28,94 @@ st.title("📈 Dynamic Stock Correlation & Risk Analysis")
 # ---------------------------------------------
 
 st.sidebar.header("Configuration")
+st.sidebar.title("🔐 Login")
 
-# Dynamic ticker entry
-default_tickers = ["ANET", "FN", "ALAB", "NVDA"]  # Arista, Fabrinet, Astera Labs, NVIDIA
-user_input = st.sidebar.text_input("Enter Tickers (comma-separated)", value=",".join(default_tickers))
-tickers = [t.strip().upper() for t in user_input.split(",") if t.strip()]
+auth_action = st.sidebar.radio("Choose:", ["Login", "Signup"])
+email = st.sidebar.text_input("Email")
+password = st.sidebar.text_input("Password", type="password")
+
+if st.sidebar.button(auth_action):
+    try:
+        if auth_action == "Signup":
+            user = supabase.auth.sign_up({"email": email, "password": password})
+        else:
+            auth_result = supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+            session = supabase.auth.get_session()
+            if session:
+                st.session_state["user"] = {
+                    "id": auth_result.user.id,
+                    "access_token": session.access_token
+                }
+                st.sidebar.success("✅ Logged in!")
+                st.rerun()
+            else:
+                st.sidebar.error("❌ Login failed: No valid session.")
+    except Exception as e:
+        st.sidebar.error(f"{auth_action} failed: {e}")
+
+tickers = []
+
+if "user" in st.session_state:
+    user = st.session_state.get("user")
+    uid = user.get("id") if user else None
+    token = user.get("access_token") if user else None
+
+    if uid and token:
+        st.sidebar.success("✅ Logged in successfully!")
+    else:
+        st.warning("⚠️ No valid session found. Please log in again.")
+
+    st.sidebar.subheader("📁 Your Groups")
+
+    groups_resp = supabase.table("groups").select("*").or_(f"user_id.eq.{uid},is_shared.eq.true").execute()
+    st.write("📦 Groups fetched:", groups_resp.data)
+    groups = groups_resp.data
+
+    group_names = [g["group_name"] for g in groups]
+    group_lookup = {g["group_name"]: g for g in groups}
+
+    selected_group = st.sidebar.selectbox("Select Group", group_names)
+    if selected_group:
+        tickers = group_lookup[selected_group]["tickers"]
+
+    with st.sidebar.expander("➕ Create New Group"):
+        new_name = st.text_input("Group Name")
+        new_tickers = st.text_input("Tickers (comma-separated)")
+        shared = st.checkbox("Make Public?")
+        if st.button("Create Group"):
+            tickers_list = [t.strip().upper() for t in new_tickers.split(",") if t.strip()]
+            if uid:
+                try:
+                    response = supabase.table("groups").insert({
+                        "user_id": uid,
+                        "group_name": new_name,
+                        "tickers": tickers_list,
+                        "is_shared": shared
+                    }).execute(headers={"Authorization": f"Bearer {token}"})
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Failed to create group: {e}")
+            else:
+                st.error("❌ You are not authenticated. Please log in before creating a group.")
+
+    if selected_group:
+        with st.sidebar.expander("✏️ Edit/Delete Group"):
+            updated_tickers = st.text_input("Edit Tickers", ",".join(group_lookup[selected_group]["tickers"]))
+            share_toggle = st.checkbox("Public?", value=group_lookup[selected_group]["is_shared"])
+            if st.button("Update Group"):
+                supabase.table("groups").update({
+                    "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
+                    "is_shared": share_toggle
+                }).eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
+                st.rerun()
+            if st.button("❌ Delete Group"):
+                supabase.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
+                st.rerun()
+else:
+    st.sidebar.info("Please log in to manage groups.")
 
 # Date range
 import datetime

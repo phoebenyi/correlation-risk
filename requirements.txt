@@ -7,3 +7,4 @@ numpy
 plotly
 riskfolio-lib
 cvxopt  # Required by riskfolio-lib for optimization
+supabase
