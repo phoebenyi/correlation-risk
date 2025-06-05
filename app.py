@@ -45,16 +45,25 @@ if st.sidebar.button(auth_action):
             })
             session = supabase.auth.get_session()
             if session:
-                st.session_state["user"] = {
-                    "id": auth_result.user.id,
-                    "access_token": session.access_token
-                }
-                st.sidebar.success("✅ Logged in!")
-                st.rerun()
+                if auth_result.user.confirmed_at is None:
+                    st.sidebar.warning("📧 Please confirm your email before logging in.")
+                else:
+                    st.session_state["user"] = {
+                        "id": auth_result.user.id,
+                        "access_token": session.access_token
+                    }
+                    st.sidebar.success("✅ Logged in!")
+                    st.rerun()
             else:
                 st.sidebar.error("❌ Login failed: No valid session.")
     except Exception as e:
         st.sidebar.error(f"{auth_action} failed: {e}")
+
+# Logout Button
+if "user" in st.session_state and st.sidebar.button("Logout"):
+    st.session_state.pop("user", None)
+    supabase.auth.sign_out()
+    st.rerun()
 
 tickers = []
 
@@ -65,13 +74,19 @@ if "user" in st.session_state:
 
     if uid and token:
         st.sidebar.success("✅ Logged in successfully!")
+        try:
+            email_info = supabase.auth.get_user()
+            email = email_info.user.email if email_info and email_info.user else "Unknown"
+            st.sidebar.markdown(f"**Logged in as:** {email}👤")
+        except Exception:
+            st.sidebar.warning("⚠️ Failed to retrieve user email.")
     else:
         st.warning("⚠️ No valid session found. Please log in again.")
 
     st.sidebar.subheader("📁 Your Groups")
 
     groups_resp = supabase.table("groups").select("*").or_(f"user_id.eq.{uid},is_shared.eq.true").execute()
-    st.write("📦 Groups fetched:", groups_resp.data)
+    # st.write("📦 Groups fetched:", groups_resp.data)
     groups = groups_resp.data
 
     group_names = [g["group_name"] for g in groups]
