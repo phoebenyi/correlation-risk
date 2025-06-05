@@ -115,7 +115,7 @@ if "user" in st.session_state:
                         "group_name": new_name,
                         "tickers": tickers_list,
                         "is_shared": shared
-                    }).execute()
+                    }).execute(headers={"Authorization": f"Bearer {token}"})
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Failed to create group: {e}")
@@ -130,10 +130,10 @@ if "user" in st.session_state:
                 authed_client.table("groups").update({
                     "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
                     "is_shared": share_toggle
-                }).eq("id", group_lookup[selected_group]["id"]).execute()
+                }).eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
                 st.rerun()
             if st.button("❌ Delete Group"):
-                authed_client.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute()
+                authed_client.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
                 st.rerun()
 else:
     st.sidebar.info("Please log in to manage groups.")
