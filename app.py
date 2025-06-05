@@ -82,7 +82,7 @@ if "user" in st.session_state:
 
     st.sidebar.subheader("📁 Your Groups")
 
-    groups_resp = supabase.table("groups").select("*").or_(f"user_id.eq.{uid},is_shared.eq.true").execute(headers={"Authorization": f"Bearer {token}"})
+    groups_resp = supabase.table("groups").select("*").or_(f"user_id.eq.{uid},is_shared.eq.true").execute()
     # st.write("📦 Groups fetched:", groups_resp.data)
     groups = groups_resp.data
 
@@ -105,7 +105,7 @@ if "user" in st.session_state:
                     "group_name": new_name,
                     "tickers": tickers_list,
                     "is_shared": shared
-                }).execute(headers={"Authorization": f"Bearer {token}"})
+                }).execute()
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Failed to create group: {e}")
@@ -121,7 +121,7 @@ if "user" in st.session_state:
                 }).eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
                 st.rerun()
             if st.button("❌ Delete Group"):
-                supabase.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
+                supabase.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute()
                 st.rerun()
 else:
     st.sidebar.info("Please log in to manage groups.")
