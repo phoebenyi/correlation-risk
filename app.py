@@ -1,6 +1,5 @@
 import streamlit as st
 from supabase import create_client
-from postgrest import SyncPostgrestClient
 import pandas as pd
 import yfinance as yf
 # import seaborn as sns
@@ -74,19 +73,16 @@ if "user" in st.session_state:
     uid = user.get("id") if user else None
     token = user.get("access_token") if user else None
 
-    if uid and token:
-        st.sidebar.success("✅ Logged in successfully!")
-        try:
-            email = user.get("email", "Unknown")
-            st.sidebar.markdown(f"**Logged in as:** {email}👤")
-        except Exception:
-            st.sidebar.warning("⚠️ Failed to retrieve user email.")
-    else:
-        st.warning("⚠️ No valid session found. Please log in again.")
+    st.sidebar.success("✅ Logged in successfully!")
+    try:
+        email = user.get("email", "Unknown")
+        st.sidebar.markdown(f"**Logged in as:** {email}👤")
+    except Exception:
+        st.sidebar.warning("⚠️ Failed to retrieve user email.")
 
     st.sidebar.subheader("📁 Your Groups")
 
-    groups_resp = supabase.table("groups").select("*").or_(f"user_id.eq.{uid},is_shared.eq.true").execute()
+    groups_resp = supabase.table("groups").select("*").or_(f"user_id.eq.{uid},is_shared.eq.true").execute(headers={"Authorization": f"Bearer {token}"})
     # st.write("📦 Groups fetched:", groups_resp.data)
     groups = groups_resp.data
 
@@ -103,37 +99,29 @@ if "user" in st.session_state:
         shared = st.checkbox("Make Public?")
         if st.button("Create Group"):
             tickers_list = [t.strip().upper() for t in new_tickers.split(",") if t.strip()]
-            if uid:
-                try:
-                    authed_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-                    authed_client.postgrest = SyncPostgrestClient(
-                        f"{SUPABASE_URL}/rest/v1",
-                        headers={"Authorization": f"Bearer {token}"}
-                    )
-                    response = authed_client.table("groups").insert({
-                        "user_id": uid,
-                        "group_name": new_name,
-                        "tickers": tickers_list,
-                        "is_shared": shared
-                    }).execute(headers={"Authorization": f"Bearer {token}"})
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Failed to create group: {e}")
-            else:
-                st.error("❌ You are not authenticated. Please log in before creating a group.")
+            try:
+                response = supabase.table("groups").insert({
+                    "user_id": uid,
+                    "group_name": new_name,
+                    "tickers": tickers_list,
+                    "is_shared": shared
+                }).execute(headers={"Authorization": f"Bearer {token}"})
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Failed to create group: {e}")
 
     if selected_group:
         with st.sidebar.expander("✏️ Edit/Delete Group"):
             updated_tickers = st.text_input("Edit Tickers", ",".join(group_lookup[selected_group]["tickers"]))
             share_toggle = st.checkbox("Public?", value=group_lookup[selected_group]["is_shared"])
             if st.button("Update Group"):
-                authed_client.table("groups").update({
+                supabase.table("groups").update({
                     "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
                     "is_shared": share_toggle
                 }).eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
                 st.rerun()
             if st.button("❌ Delete Group"):
-                authed_client.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
+                supabase.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
                 st.rerun()
 else:
     st.sidebar.info("Please log in to manage groups.")
