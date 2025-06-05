@@ -104,7 +104,10 @@ if "user" in st.session_state:
             tickers_list = [t.strip().upper() for t in new_tickers.split(",") if t.strip()]
             if uid:
                 try:
-                    response = supabase.table("groups").insert({
+                    # Create a new client using the logged-in user's token
+                    authed_client = create_client(SUPABASE_URL, SUPABASE_KEY, options={"global": {"headers": {"Authorization": f"Bearer {token}"}}})
+
+                    response = authed_client.table("groups").insert({
                         "user_id": uid,
                         "group_name": new_name,
                         "tickers": tickers_list,
@@ -121,13 +124,13 @@ if "user" in st.session_state:
             updated_tickers = st.text_input("Edit Tickers", ",".join(group_lookup[selected_group]["tickers"]))
             share_toggle = st.checkbox("Public?", value=group_lookup[selected_group]["is_shared"])
             if st.button("Update Group"):
-                supabase.table("groups").update({
+                authed_client.table("groups").update({
                     "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
                     "is_shared": share_toggle
                 }).eq("id", group_lookup[selected_group]["id"]).execute()
                 st.rerun()
             if st.button("❌ Delete Group"):
-                supabase.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute()
+                authed_client.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute()
                 st.rerun()
 else:
     st.sidebar.info("Please log in to manage groups.")
