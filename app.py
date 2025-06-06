@@ -104,9 +104,11 @@ if "user" in st.session_state:
     groups_resp = supabase.table("groups").select("*").or_(group_filter).execute()
     groups = groups_resp.data
 
-    group_names = [g["group_name"] + (" 🌐" if g["is_shared"] else "") for g in groups]
-    group_lookup = {g["group_name"]: g for g in groups}
-
+    group_names = [g["group_name"] + (" 🌐 Public" if g["is_shared"] else "") for g in groups]
+    group_lookup = {
+        g["group_name"] + (" 🌐 Public" if g["is_shared"] else ""): g
+        for g in groups
+    }
     selected_group = st.sidebar.selectbox("Select Group", group_names)
     if selected_group:
         tickers = group_lookup[selected_group]["tickers"]
