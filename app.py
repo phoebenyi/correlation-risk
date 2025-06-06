@@ -51,8 +51,10 @@ if st.sidebar.button(auth_action):
                     st.session_state["user"] = {
                         "id": auth_result.user.id,
                         "access_token": session.access_token,
+                        "refresh_token": session.refresh_token,
                         "email": auth_result.user.email
                     }
+                    supabase.auth.set_session(session.access_token, session.refresh_token)
                     st.sidebar.success("✅ Logged in!")
                     st.rerun()
             else:
@@ -100,6 +102,7 @@ if "user" in st.session_state:
         if st.button("Create Group"):
             tickers_list = [t.strip().upper() for t in new_tickers.split(",") if t.strip()]
             try:
+                st.write("Session debug:", supabase.auth.get_session())
                 response = supabase.table("groups").insert({
                     "group_name": new_name,
                     "tickers": tickers_list,
