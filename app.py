@@ -95,11 +95,16 @@ if "user" in st.session_state:
 
     st.sidebar.subheader("📁 Your Groups")
 
-    groups_resp = supabase.table("groups").select("*").or_(f"user_id.eq.{uid},is_shared.eq.true").execute()
-    # st.write("📦 Groups fetched:", groups_resp.data)
+    if "user" in st.session_state:
+        uid = st.session_state["user"].get("id")
+        group_filter = f"user_id.eq.{uid},is_shared.eq.true"
+    else:
+        group_filter = "is_shared.eq.true"
+
+    groups_resp = supabase.table("groups").select("*").or_(group_filter).execute()
     groups = groups_resp.data
 
-    group_names = [g["group_name"] for g in groups]
+    group_names = [g["group_name"] + (" 🌐" if g["is_shared"] else "") for g in groups]
     group_lookup = {g["group_name"]: g for g in groups}
 
     selected_group = st.sidebar.selectbox("Select Group", group_names)
