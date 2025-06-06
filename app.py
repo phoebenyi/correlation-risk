@@ -101,7 +101,6 @@ if "user" in st.session_state:
             tickers_list = [t.strip().upper() for t in new_tickers.split(",") if t.strip()]
             try:
                 response = supabase.table("groups").insert({
-                    "user_id": uid,
                     "group_name": new_name,
                     "tickers": tickers_list,
                     "is_shared": shared
