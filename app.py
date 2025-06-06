@@ -111,24 +111,23 @@ if "user" in st.session_state:
     }
     selected_group = st.sidebar.selectbox("Select Group", group_names)
     if selected_group:
-        tickers = group_lookup[selected_group]["tickers"]
-
-    with st.sidebar.expander("➕ Create New Group"):
-        new_name = st.text_input("Group Name")
-        new_tickers = st.text_input("Tickers (comma-separated)")
-        shared = st.checkbox("Make Public?")
-        if st.button("Create Group"):
-            tickers_list = [t.strip().upper() for t in new_tickers.split(",") if t.strip()]
-            try:
-                # st.write("Session debug:", supabase.auth.get_session())
-                response = supabase.table("groups").insert({
-                    "group_name": new_name,
-                    "tickers": tickers_list,
-                    "is_shared": shared
-                }).execute()
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Failed to create group: {e}")
+        group_obj = group_lookup[selected_group]
+        # Only allow editing if user is the group owner
+        if "user" in st.session_state and group_obj["user_id"] == st.session_state["user"]["id"]:
+            with st.sidebar.expander("✏️ Edit/Delete Group"):
+                updated_tickers = st.text_input("Edit Tickers", ",".join(group_obj["tickers"]))
+                share_toggle = st.checkbox("Public?", value=group_obj["is_shared"])
+                if st.button("Update Group"):
+                    supabase.table("groups").update({
+                        "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
+                        "is_shared": share_toggle
+                    }).eq("id", group_obj["id"]).execute(headers={"Authorization": f"Bearer {token}"})
+                    st.rerun()
+                if st.button("❌ Delete Group"):
+                    supabase.table("groups").delete().eq("id", group_obj["id"]).execute()
+                    st.rerun()
+        else:
+            st.sidebar.info("🔒 You can view this public group, but only the owner can edit or delete it.")
 
     if selected_group:
         with st.sidebar.expander("✏️ Edit/Delete Group"):
