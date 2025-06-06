@@ -216,153 +216,6 @@ if st.sidebar.button("🔍 Run Analysis"):
             buffer_prices.seek(0)
             st.download_button("⬇️ Download Price Data CSV", data=buffer_prices.getvalue(), file_name="prices.csv", mime="text/csv")
 
-            # ---------------------------------------------
-            # Price History Visualization
-            # ---------------------------------------------
-
-            st.subheader("📊 Raw Price History Comparison")
-            st.write("📉 **Raw Prices** – Actual trading prices. ✅ Useful for valuation, ❌ hard to compare across different price ranges.")
-            st.write("📉 Using raw 'Close' prices (not adjusted for splits/dividends)")
-            st.subheader("📊 Latest Price Data Snapshot")
-            with st.expander("🔍 View Latest Raw Price Table"):
-                st.dataframe(df.tail(10))
-            st.line_chart(df)
-
-            st.subheader("📊 Normalised Price History Comparison")
-            df_norm = df.apply(lambda x: x / x.dropna().iloc[0] * 100 if x.dropna().shape[0] > 0 else x)
-            st.write("📈 **Normalized Prices** – All lines start at 100. ✅ Great for comparing relative performance, ❌ loses actual price context.")
-            with st.expander("🔍 View Latest Normalized Price Table"):
-                st.dataframe(df_norm.tail(10).round(2))
-            st.line_chart(df_norm)
-
-            # st.subheader("📊 Log Price History Comparison")
-            # import matplotlib.pyplot as plt
-            # st.write("📊 **Log Prices** – Price on a logarithmic scale. ✅ Better for visualizing exponential growth, ❌ can distort small moves.")
-            # with st.expander("🔍 View Latest Log Price Table"):
-            #     st.dataframe(df.tail(10))
-            # fig, ax = plt.subplots(figsize=(9, 4))
-            # df.plot(ax=ax, logy=True)
-            # ax.set_title("Log Price Chart")
-            # ax.grid(True)
-            # ax.legend(
-            #     loc="upper center",
-            #     bbox_to_anchor=(0.5, -0.3),
-            #     ncol=min(4, len(df.columns)),
-            #     frameon=False,
-            #     fontsize=8
-            # )
-            # st.pyplot(fig, clear_figure=True)
-
-            # ---------------------------------------------
-            # Return Calculation based on frequency & type
-            # ---------------------------------------------
-            if freq == "Daily":
-                returns = df.pct_change() if abs_or_pct == "% Change (Relative)" else df.diff()
-                returns = returns.dropna(how="all")
-
-            elif freq == "Monthly":
-                monthly_prices = df.ffill().resample("M").last()
-                if abs_or_pct == "% Change (Relative)":
-                    returns = pd.concat([monthly_prices[col].pct_change() for col in monthly_prices.columns], axis=1)
-                else:
-                    returns = pd.concat([monthly_prices[col].diff() for col in monthly_prices.columns], axis=1)
-                returns.columns = monthly_prices.columns
-
-            elif freq == "Yearly":
-                if overlap_window == "Yes":
-                    if abs_or_pct == "% Change (Relative)":
-                        returns = pd.concat([df[col].pct_change(252) for col in df.columns], axis=1)
-                    else:
-                        returns = pd.concat([df[col].diff(252) for col in df.columns], axis=1)
-                    returns.columns = df.columns
-                else:
-                    yearly_prices = df.ffill().resample("YE").last()
-                    if abs_or_pct == "% Change (Relative)":
-                        returns = pd.concat([yearly_prices[col].pct_change() for col in yearly_prices.columns], axis=1)
-                    else:
-                        returns = pd.concat([yearly_prices[col].diff() for col in yearly_prices.columns], axis=1)
-                    returns.columns = yearly_prices.columns
-
-            st.session_state["df"] = df
-            st.session_state["returns"] = returns
-            st.session_state["tickers"] = returns.columns.tolist()
-
-
-            # ---------------------------------------------
-            # Correlation Matrix
-            # ---------------------------------------------
-            tickers = returns.columns.tolist()
-            pairwise_corr = pd.DataFrame(index=tickers, columns=tickers, dtype=float)
-
-            for i, j in itertools.combinations(tickers, 2):
-                x = returns[i].dropna()
-                y = returns[j].dropna()
-                overlap = x.index.intersection(y.index)
-                if len(overlap) > 1:
-                    corr_val = x[overlap].corr(y[overlap], method=corr_type.lower())
-                    pairwise_corr.loc[i, j] = corr_val
-                    pairwise_corr.loc[j, i] = corr_val
-
-            # Fill diagonal with 1s
-            np.fill_diagonal(pairwise_corr.values, 1.0)
-
-            corr = pairwise_corr
-
-            st.subheader("📍 Key Correlation Highlights")
-
-            # ---------------------------------------------
-            # Top +ve and -ve Correlated Pairs
-            # ---------------------------------------------
-
-            # Unstack matrix and remove self-pairs and duplicates
-            corr_pairs = corr.where(~np.eye(len(corr), dtype=bool))  # mask diagonal
-            corr_flat = corr_pairs.unstack().dropna().reset_index()
-            corr_flat.columns = ['Stock A', 'Stock B', 'Correlation']
-            corr_flat = corr_flat[corr_flat['Stock A'] < corr_flat['Stock B']]  # remove duplicates
-
-            # Top +ve correlations
-            top_pos = corr_flat.sort_values(by='Correlation', ascending=False).head(5)
-            st.markdown("### 🔝 Top 5 Positively Correlated Pairs")
-            st.dataframe(top_pos.reset_index(drop=True).round(3))
-
-            # Top -ve correlations
-            top_neg = corr_flat.sort_values(by='Correlation', ascending=True).head(5)
-            st.markdown("### 🔻 Top 5 Negatively Correlated Pairs")
-            st.dataframe(top_neg.reset_index(drop=True).round(3))
-
-            # Highlight strong correlations
-            threshold = 0.8
-            strong_corr = corr_flat[abs(corr_flat["Correlation"]) > threshold]
-            st.markdown(f"### ⚠️ Pairs with |Correlation| > {threshold}")
-            st.dataframe(strong_corr.reset_index(drop=True).round(3))
-
-            st.subheader(f"📌 {corr_type} Correlation Matrix")
-
-            # correlation matrix table commented out to avoid repetitive display
-            # st.dataframe(corr.round(3))
-
-            fig = px.imshow(
-            corr,
-            text_auto=".2f",
-            color_continuous_scale="RdBu_r",
-            aspect="auto",
-            title=f"{corr_type} Correlation Matrix"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-            # removed seaborn because it's a static image and headers cannot be sticky
-            # fig, ax = plt.subplots(figsize=(8, 6))
-            # sns.heatmap(corr, annot=True, cmap="coolwarm", linewidths=0.5, ax=ax)
-            # st.pyplot(fig)
-
-            # ---------------------------------------------
-            # CSV Export
-            # ---------------------------------------------
-            buffer = io.StringIO()
-            corr.to_csv(buffer)
-            csv = buffer.getvalue().encode("utf-8")
-            st.download_button("⬇️ Download Correlation Matrix CSV", data=csv, file_name="correlation_matrix.csv", mime="text/csv")
-
 if "returns" in st.session_state and "tickers" in st.session_state:
     st.subheader("🔁 Rolling Correlation Viewer")
     window = st.slider("Rolling Window (days)", 20, 180, 60, key="rolling_window")
@@ -382,64 +235,194 @@ if "returns" in st.session_state and "tickers" in st.session_state:
             st.line_chart(roll_corr.dropna())
         except Exception as e:
             st.error(f"Rolling correlation failed: {e}")
-            
-            # REMOVED riskfolio-lib section as it is irrelevant to the current task
-            # ---------------------------------------------
-            # Risk Metrics and Portfolio Optimization
-            # ---------------------------------------------
-            # if riskfolio_available and len(tickers) > 1:
 
-            #     def get_risk_metrics(returns, alpha=0.05, rf=0.0):
-            #             metrics = {}
-            #             for col in returns.columns:
-            #                 r = returns[col].dropna()
-            #                 if len(r) == 0:
-            #                     continue  # skip this asset
-            #                 var = np.percentile(r, 100 * alpha)
-            #                 cvar = r[r <= var].mean()
-            #                 sharpe = (r.mean() - rf) / r.std() * np.sqrt(252)
-            #                 metrics[col] = {"VaR_0.05": var, "CVaR_0.05": cvar, "Sharpe": sharpe}
-            #             return pd.DataFrame(metrics).T
-                
-            #     st.subheader("📉 Risk Metrics (VaR, CVaR, Sharpe)")
-            #     returns_clean = returns.replace([np.inf, -np.inf], np.nan)
-            #     min_valid_obs = 3
-            #     returns_clean = returns_clean.dropna(axis=1, thresh=min_valid_obs)  # drop columns with too few valid obs
-            #     returns_clean = returns_clean.dropna()  # drop any remaining NaN rows
+if all(k in st.session_state for k in ["df", "returns", "tickers", "corr", "top_pos", "top_neg", "strong_corr"]):
+    df = st.session_state["df"]
+    returns = st.session_state["returns"]
+    tickers = st.session_state["tickers"]
+    corr = st.session_state["corr"]
+    top_pos = st.session_state["top_pos"]
+    top_neg = st.session_state["top_neg"]
+    strong_corr = st.session_state["strong_corr"]
 
-            #     if returns_clean.shape[1] < 2 or returns_clean.shape[0] < 3:
-            #         st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio. Need ≥ 2 assets and ≥ 3 return periods.")
-            #     else:
-            #         port = rp.Portfolio(returns=returns_clean)
-            #         port.assets_stats(method_mu='hist', method_cov='hist')
+    # ---------------------------------------------
+    # Price History Visualization
+    # ---------------------------------------------
+    st.subheader("📊 Raw Price History Comparison")
+    st.write("📉 **Raw Prices** – Actual trading prices. ✅ Useful for valuation, ❌ hard to compare across different price ranges.")
+    st.write("📉 Using raw 'Close' prices (not adjusted for splits/dividends)")
+    st.subheader("📊 Latest Price Data Snapshot")
+    with st.expander("🔍 View Latest Raw Price Table"):
+        st.dataframe(df.tail(10))
+    st.line_chart(df)
 
-            #         # Compute VaR, CVaR, Sharpe
-            #         risk = get_risk_metrics(returns_clean)
-            #         st.dataframe(risk.round(4))
+    st.subheader("📊 Normalised Price History Comparison")
+    df_norm = df.apply(lambda x: x / x.dropna().iloc[0] * 100 if x.dropna().shape[0] > 0 else x)
+    st.write("📈 **Normalized Prices** – All lines start at 100. ✅ Great for comparing relative performance, ❌ loses actual price context.")
+    with st.expander("🔍 View Latest Normalized Price Table"):
+        st.dataframe(df_norm.tail(10).round(2))
+    st.line_chart(df_norm)
 
-            #         st.subheader("🧠 Portfolio Optimization (Max Sharpe)")
-            #         w = port.optimization(model="Classic", rm="MV", obj="Sharpe", hist=True)
-            #         st.dataframe(w.T.round(4))
+    # st.subheader("📊 Log Price History Comparison")
+    # import matplotlib.pyplot as plt
+    # st.write("📊 **Log Prices** – Price on a logarithmic scale. ✅ Better for visualizing exponential growth, ❌ can distort small moves.")
+    # with st.expander("🔍 View Latest Log Price Table"):
+    #     st.dataframe(df.tail(10))
+    # fig, ax = plt.subplots(figsize=(9, 4))
+    # df.plot(ax=ax, logy=True)
+    # ax.set_title("Log Price Chart")
+    # ax.grid(True)
+    # ax.legend(
+    #     loc="upper center",
+    #     bbox_to_anchor=(0.5, -0.3),
+    #     ncol=min(4, len(df.columns)),
+    #     frameon=False,
+    #     fontsize=8
+    # )
+    # st.pyplot(fig, clear_figure=True)
 
-            #         port_weights = w[w > 0].index.tolist()
-            #         selected_weights = w.loc[port_weights].values.flatten()
+    # ---------------------------------------------
+    # Return Calculation based on frequency & type
+    # ---------------------------------------------
+    returns = st.session_state["returns"]
+    st.session_state["tickers"] = returns.columns.tolist()
 
-            #         weighted_returns = returns[port_weights].mul(selected_weights, axis=1).sum(axis=1)
-            #         cumulative_returns = (1 + weighted_returns).cumprod()
+    # ---------------------------------------------
+    # Correlation Matrix
+    # ---------------------------------------------
+    tickers = returns.columns.tolist()
+    pairwise_corr = pd.DataFrame(index=tickers, columns=tickers, dtype=float)
 
-            #         st.subheader("📈 Optimized Portfolio Cumulative Returns")
-            #         st.line_chart(cumulative_returns)
+    for i, j in itertools.combinations(tickers, 2):
+        x = returns[i].dropna()
+        y = returns[j].dropna()
+        overlap = x.index.intersection(y.index)
+        if len(overlap) > 1:
+            corr_val = x[overlap].corr(y[overlap], method=corr_type.lower())
+            pairwise_corr.loc[i, j] = corr_val
+            pairwise_corr.loc[j, i] = corr_val
 
-            #         st.subheader("📉 Drawdown Chart")
-            #         drawdown = (cumulative_returns - cumulative_returns.cummax()) / cumulative_returns.cummax()
-            #         st.line_chart(drawdown)
+    # Fill diagonal with 1s
+    np.fill_diagonal(pairwise_corr.values, 1.0)
 
-            #         st.subheader("🔁 Monthly Rebalanced Portfolio Returns")
-            #         rebalance_returns = weighted_returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
-            #         st.line_chart((1 + rebalance_returns).cumprod())
+    corr = pairwise_corr
+    st.session_state["corr"] = corr
+    st.session_state["top_pos"] = top_pos
+    st.session_state["top_neg"] = top_neg
+    st.session_state["strong_corr"] = strong_corr
 
-            # elif not riskfolio_available:
-            #     st.warning("Install `riskfolio-lib` to enable risk metrics.")
+    st.subheader("📍 Key Correlation Highlights")
+
+    # ---------------------------------------------
+    # Top +ve and -ve Correlated Pairs
+    # ---------------------------------------------
+
+    # Unstack matrix and remove self-pairs and duplicates
+    corr_pairs = corr.where(~np.eye(len(corr), dtype=bool))  # mask diagonal
+    corr_flat = corr_pairs.unstack().dropna().reset_index()
+    corr_flat.columns = ['Stock A', 'Stock B', 'Correlation']
+    corr_flat = corr_flat[corr_flat['Stock A'] < corr_flat['Stock B']]  # remove duplicates
+
+    # Top +ve correlations
+    top_pos = corr_flat.sort_values(by='Correlation', ascending=False).head(5)
+    st.markdown("### 🔝 Top 5 Positively Correlated Pairs")
+    st.dataframe(top_pos.reset_index(drop=True).round(3))
+
+    # Top -ve correlations
+    top_neg = corr_flat.sort_values(by='Correlation', ascending=True).head(5)
+    st.markdown("### 🔻 Top 5 Negatively Correlated Pairs")
+    st.dataframe(top_neg.reset_index(drop=True).round(3))
+
+    # Highlight strong correlations
+    threshold = 0.8
+    strong_corr = corr_flat[abs(corr_flat["Correlation"]) > threshold]
+    st.markdown(f"### ⚠️ Pairs with |Correlation| > {threshold}")
+    st.dataframe(strong_corr.reset_index(drop=True).round(3))
+
+    st.subheader(f"📌 {corr_type} Correlation Matrix")
+
+    # correlation matrix table commented out to avoid repetitive display
+    # st.dataframe(corr.round(3))
+
+    fig = px.imshow(
+    corr,
+    text_auto=".2f",
+    color_continuous_scale="RdBu_r",
+    aspect="auto",
+    title=f"{corr_type} Correlation Matrix"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # removed seaborn because it's a static image and headers cannot be sticky
+    # fig, ax = plt.subplots(figsize=(8, 6))
+    # sns.heatmap(corr, annot=True, cmap="coolwarm", linewidths=0.5, ax=ax)
+    # st.pyplot(fig)
+
+    # ---------------------------------------------
+    # CSV Export
+    # ---------------------------------------------
+    buffer = io.StringIO()
+    corr.to_csv(buffer)
+    csv = buffer.getvalue().encode("utf-8")
+    st.download_button("⬇️ Download Correlation Matrix CSV", data=csv, file_name="correlation_matrix.csv", mime="text/csv")
+    
+    # REMOVED riskfolio-lib section as it is irrelevant to the current task
+    # ---------------------------------------------
+    # Risk Metrics and Portfolio Optimization
+    # ---------------------------------------------
+    # if riskfolio_available and len(tickers) > 1:
+
+    #     def get_risk_metrics(returns, alpha=0.05, rf=0.0):
+    #             metrics = {}
+    #             for col in returns.columns:
+    #                 r = returns[col].dropna()
+    #                 if len(r) == 0:
+    #                     continue  # skip this asset
+    #                 var = np.percentile(r, 100 * alpha)
+    #                 cvar = r[r <= var].mean()
+    #                 sharpe = (r.mean() - rf) / r.std() * np.sqrt(252)
+    #                 metrics[col] = {"VaR_0.05": var, "CVaR_0.05": cvar, "Sharpe": sharpe}
+    #             return pd.DataFrame(metrics).T
+        
+    #     st.subheader("📉 Risk Metrics (VaR, CVaR, Sharpe)")
+    #     returns_clean = returns.replace([np.inf, -np.inf], np.nan)
+    #     min_valid_obs = 3
+    #     returns_clean = returns_clean.dropna(axis=1, thresh=min_valid_obs)  # drop columns with too few valid obs
+    #     returns_clean = returns_clean.dropna()  # drop any remaining NaN rows
+
+    #     if returns_clean.shape[1] < 2 or returns_clean.shape[0] < 3:
+    #         st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio. Need ≥ 2 assets and ≥ 3 return periods.")
+    #     else:
+    #         port = rp.Portfolio(returns=returns_clean)
+    #         port.assets_stats(method_mu='hist', method_cov='hist')
+
+    #         # Compute VaR, CVaR, Sharpe
+    #         risk = get_risk_metrics(returns_clean)
+    #         st.dataframe(risk.round(4))
+
+    #         st.subheader("🧠 Portfolio Optimization (Max Sharpe)")
+    #         w = port.optimization(model="Classic", rm="MV", obj="Sharpe", hist=True)
+    #         st.dataframe(w.T.round(4))
+
+    #         port_weights = w[w > 0].index.tolist()
+    #         selected_weights = w.loc[port_weights].values.flatten()
+
+    #         weighted_returns = returns[port_weights].mul(selected_weights, axis=1).sum(axis=1)
+    #         cumulative_returns = (1 + weighted_returns).cumprod()
+
+    #         st.subheader("📈 Optimized Portfolio Cumulative Returns")
+    #         st.line_chart(cumulative_returns)
+
+    #         st.subheader("📉 Drawdown Chart")
+    #         drawdown = (cumulative_returns - cumulative_returns.cummax()) / cumulative_returns.cummax()
+    #         st.line_chart(drawdown)
+
+    #         st.subheader("🔁 Monthly Rebalanced Portfolio Returns")
+    #         rebalance_returns = weighted_returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
+    #         st.line_chart((1 + rebalance_returns).cumprod())
+
+    # elif not riskfolio_available:
+    #     st.warning("Install `riskfolio-lib` to enable risk metrics.")
 #     st.success("✅ Analysis complete!")
 # else:
 #     st.info("👈 Select settings on the left and click 'Run Analysis'.")
