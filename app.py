@@ -104,6 +104,7 @@ if "user" in st.session_state:
     selected_group = st.sidebar.selectbox("Select Group", group_names)
     if selected_group:
         group_obj = group_lookup[selected_group]
+        tickers = group_obj["tickers"]
         # Only allow editing if user is the group owner
         if "user" in st.session_state and group_obj["user_id"] == st.session_state["user"]["id"]:
             with st.sidebar.expander("✏️ Edit/Delete Group"):
@@ -141,17 +142,6 @@ overlap_window = st.sidebar.selectbox("Overlap Windows (for Yearly)?", ["Yes", "
 # Correlation method
 corr_type = st.sidebar.selectbox("Correlation Method", ["Pearson", "Kendall", "Spearman"])
 
-# Rolling correlation
-window = st.sidebar.slider("Rolling Correlation Window (days)", 20, 180, 60)
-
-rolling_pairs = [(a, b) for i, a in enumerate(tickers) for b in tickers[i+1:]] if len(tickers) >= 2 else []
-pair = st.sidebar.selectbox(
-    "🔁 Choose Pair for Rolling Correlation",
-    rolling_pairs,
-    format_func=lambda x: f"{x[0]} vs {x[1]}",
-    key="rolling_pair",
-    help="Select any pair of stocks to see how their correlation changes over time"
-)
 # ---------------------------------------------
 # Begin Analysis
 # ---------------------------------------------
@@ -373,18 +363,26 @@ if st.sidebar.button("🔍 Run Analysis"):
             # ---------------------------------------------
             # Rolling Correlation — dynamic pair selector
             # ---------------------------------------------
-            if len(tickers) >= 2 and pair and pair[0] in returns.columns and pair[1] in returns.columns:
+            window = st.slider("Rolling Window (days)", 20, 180, 60, key="rolling_window")
+            if len(tickers) >= 2:
+                st.subheader("🔁 Rolling Correlation Viewer")
+                rolling_pairs = [(a, b) for i, a in enumerate(tickers) for b in tickers[i+1:]]
+                pair = st.selectbox(
+                    "Choose Pair",
+                    rolling_pairs,
+                    format_func=lambda x: f"{x[0]} vs {x[1]}",
+                    key="rolling_pair_main"
+                )
                 t1, t2 = pair
-                st.subheader(f"🔁 Rolling Correlation: {t1} vs {t2}")
                 try:
                     aligned = returns[[t1, t2]].dropna()
                     roll_corr = aligned[t1].rolling(window).corr(aligned[t2])
                     st.line_chart(roll_corr.dropna())
                 except Exception as e:
                     st.error(f"Rolling correlation failed: {e}")
-    st.success("✅ Analysis complete!")
-else:
-    st.info("👈 Select settings on the left and click 'Run Analysis'.")
+                st.success("✅ Analysis complete!")
+            else:
+                st.info("👈 Select settings on the left and click 'Run Analysis'.")
 
             # REMOVED riskfolio-lib section as it is irrelevant to the current task
             # ---------------------------------------------
