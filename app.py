@@ -116,19 +116,6 @@ if "user" in st.session_state:
                 if st.button("❌ Delete Group"):
                     supabase.table("groups").delete().eq("id", group_obj["id"]).execute()
                     st.rerun()
-
-    if selected_group:
-        with st.sidebar.expander("✏️ Edit/Delete Group"):
-            updated_tickers = st.text_input("Edit Tickers", ",".join(group_lookup[selected_group]["tickers"]))
-            if st.button("Update Group"):
-                supabase.table("groups").update({
-                    "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
-                    "is_shared": False
-                }).eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
-                st.rerun()
-            if st.button("❌ Delete Group"):
-                supabase.table("groups").delete().eq("id", group_lookup[selected_group]["id"]).execute()
-                st.rerun()
 else:
     st.sidebar.info("Please log in to manage groups.")
 
