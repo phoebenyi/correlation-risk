@@ -100,4 +100,4 @@ Manually adjust variables for analysis and code for testing.
 ## ⚠️ Copyright
 
 This project is publicly viewable for educational and demonstration purposes.  
-All rights are reserved. Please do not reproduce, copy, or redistribute without permission.
+**All rights are reserved.** Please do not reproduce, copy, or redistribute without permission from author (Phoebe Neo).
