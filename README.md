@@ -14,9 +14,9 @@ An interactive dashboard built with **Streamlit** to analyze cross-asset correla
 
 ### ✅ Core Capabilities
 
-- **User-Specific Private Group** - Each user can save and manage named stock groups (e.g., "Tech Stocks", "China Exposure") tied to their account which will not be accessible to the public
+- **User-Specific Private Group** - Each user can save and manage named stock groups (e.g., "Tech Stocks", "China Exposure") tied to their account and only visible to them/will not be accessible to the public
 - **Dynamic Ticker Input** – Analyse any stocks (Yahoo Finance-compatible ticker)
-- **Flexible Date Range Control** – Analyze as far back as 2010 or narrow to recent periods
+- **Flexible Date Range Control** – Analyze data as far back as 2010 or narrow to recent periods
 - **Customizable Return Calculations** – Compare raw price changes vs percent changes, daily/monthly/yearly
 - **Overlap Handling** – Choose between overlapping and non-overlapping return windows for YoY analysis
 - **Rolling Correlation** – Analyze how correlation between any stock pair changes over time
@@ -69,7 +69,8 @@ streamlit run app.py
 ```
 
 Then visit `http://localhost:8501`
-> ⚠️ Make sure .streamlit/secrets.toml includes your Supabase project config
+
+> ⚠️ Ensure `.streamlit/secrets.toml` contains your Supabase credentials:
 ```bash
 [supabase]
 url = "https://your-project-id.supabase.co"
