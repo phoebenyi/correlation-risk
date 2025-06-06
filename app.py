@@ -118,7 +118,7 @@ if "user" in st.session_state:
         if st.button("Create Group"):
             tickers_list = [t.strip().upper() for t in new_tickers.split(",") if t.strip()]
             try:
-                st.write("Session debug:", supabase.auth.get_session())
+                # st.write("Session debug:", supabase.auth.get_session())
                 response = supabase.table("groups").insert({
                     "group_name": new_name,
                     "tickers": tickers_list,
