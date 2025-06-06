@@ -268,7 +268,6 @@ if st.sidebar.button("🔍 Run Analysis"):
                     returns = pd.concat([monthly_prices[col].diff() for col in monthly_prices.columns], axis=1)
                 returns.columns = monthly_prices.columns
 
-
             elif freq == "Yearly":
                 if overlap_window == "Yes":
                     if abs_or_pct == "% Change (Relative)":
@@ -283,6 +282,10 @@ if st.sidebar.button("🔍 Run Analysis"):
                     else:
                         returns = pd.concat([yearly_prices[col].diff() for col in yearly_prices.columns], axis=1)
                     returns.columns = yearly_prices.columns
+
+            st.session_state["df"] = df
+            st.session_state["returns"] = returns
+            st.session_state["tickers"] = returns.columns.tolist()
 
 
             # ---------------------------------------------
@@ -360,30 +363,26 @@ if st.sidebar.button("🔍 Run Analysis"):
             csv = buffer.getvalue().encode("utf-8")
             st.download_button("⬇️ Download Correlation Matrix CSV", data=csv, file_name="correlation_matrix.csv", mime="text/csv")
 
-            # ---------------------------------------------
-            # Rolling Correlation — dynamic pair selector
-            # ---------------------------------------------
-            window = st.slider("Rolling Window (days)", 20, 180, 60, key="rolling_window")
-            if len(tickers) >= 2:
-                st.subheader("🔁 Rolling Correlation Viewer")
-                rolling_pairs = [(a, b) for i, a in enumerate(tickers) for b in tickers[i+1:]]
-                pair = st.selectbox(
-                    "Choose Pair",
-                    rolling_pairs,
-                    format_func=lambda x: f"{x[0]} vs {x[1]}",
-                    key="rolling_pair_main"
-                )
-                t1, t2 = pair
-                try:
-                    aligned = returns[[t1, t2]].dropna()
-                    roll_corr = aligned[t1].rolling(window).corr(aligned[t2])
-                    st.line_chart(roll_corr.dropna())
-                except Exception as e:
-                    st.error(f"Rolling correlation failed: {e}")
-                st.success("✅ Analysis complete!")
-            else:
-                st.info("👈 Select settings on the left and click 'Run Analysis'.")
+if "returns" in st.session_state and "tickers" in st.session_state:
+    st.subheader("🔁 Rolling Correlation Viewer")
+    window = st.slider("Rolling Window (days)", 20, 180, 60, key="rolling_window")
+    tickers = st.session_state["tickers"]
+    returns = st.session_state["returns"]
+    rolling_pairs = [(a, b) for i, a in enumerate(tickers) for b in tickers[i+1:]]
 
+    # ---------------------------------------------
+    # Rolling Correlation — dynamic pair selector
+    # ---------------------------------------------
+    if rolling_pairs:
+        pair = st.selectbox("Choose Pair", rolling_pairs, format_func=lambda x: f"{x[0]} vs {x[1]}", key="rolling_pair_main")
+        t1, t2 = pair
+        try:
+            aligned = returns[[t1, t2]].dropna()
+            roll_corr = aligned[t1].rolling(window).corr(aligned[t2])
+            st.line_chart(roll_corr.dropna())
+        except Exception as e:
+            st.error(f"Rolling correlation failed: {e}")
+            
             # REMOVED riskfolio-lib section as it is irrelevant to the current task
             # ---------------------------------------------
             # Risk Metrics and Portfolio Optimization
