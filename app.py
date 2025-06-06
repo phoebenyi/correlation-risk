@@ -47,6 +47,7 @@ if st.sidebar.button(auth_action):
     try:
         if auth_action == "Signup":
             user = supabase.auth.sign_up({"email": email, "password": password})
+            st.sidebar.success("✅ Please check your email to confirm your account. After confirming, you can log in.")
         else:
             auth_result = supabase.auth.sign_in_with_password({
                 "email": email,
