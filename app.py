@@ -44,8 +44,7 @@ if st.sidebar.button(auth_action):
                 "password": password
             })
 
-            session_response = supabase.auth.get_session()
-            session = session_response.session
+            session = supabase.auth.get_session()
             if session:
                 if auth_result.user.confirmed_at is None:
                     st.sidebar.warning("📧 Please confirm your email before logging in.")
