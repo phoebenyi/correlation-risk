@@ -12,7 +12,16 @@ import itertools
 # Securely load from .streamlit/secrets.toml
 SUPABASE_URL = st.secrets["supabase"]["url"]
 SUPABASE_KEY = st.secrets["supabase"]["key"]
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def get_client():
+    client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    user = st.session_state.get("user")
+    if user:
+        client.auth.set_session(user["access_token"], user["refresh_token"])
+    return client
+
+supabase = get_client()
 
 try:
     import riskfolio as rp
