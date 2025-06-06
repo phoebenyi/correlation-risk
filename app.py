@@ -95,20 +95,12 @@ if "user" in st.session_state:
 
     st.sidebar.subheader("📁 Your Groups")
 
-    if "user" in st.session_state:
-        uid = st.session_state["user"].get("id")
-        group_filter = f"user_id.eq.{uid},is_shared.eq.true"
-    else:
-        group_filter = "is_shared.eq.true"
-
-    groups_resp = supabase.table("groups").select("*").or_(group_filter).execute()
+    uid = st.session_state["user"].get("id")
+    groups_resp = supabase.table("groups").select("*").eq("user_id", uid).execute()
     groups = groups_resp.data
 
-    group_names = [g["group_name"] + (" 🌐 Public" if g["is_shared"] else "") for g in groups]
-    group_lookup = {
-        g["group_name"] + (" 🌐 Public" if g["is_shared"] else ""): g
-        for g in groups
-    }
+    group_names = [g["group_name"] for g in groups]
+    group_lookup = {g["group_name"]: g for g in groups}
     selected_group = st.sidebar.selectbox("Select Group", group_names)
     if selected_group:
         group_obj = group_lookup[selected_group]
@@ -116,27 +108,22 @@ if "user" in st.session_state:
         if "user" in st.session_state and group_obj["user_id"] == st.session_state["user"]["id"]:
             with st.sidebar.expander("✏️ Edit/Delete Group"):
                 updated_tickers = st.text_input("Edit Tickers", ",".join(group_obj["tickers"]))
-                share_toggle = st.checkbox("Public?", value=group_obj["is_shared"])
                 if st.button("Update Group"):
                     supabase.table("groups").update({
-                        "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
-                        "is_shared": share_toggle
+                        "tickers": [t.strip().upper() for t in updated_tickers.split(",")]
                     }).eq("id", group_obj["id"]).execute(headers={"Authorization": f"Bearer {token}"})
                     st.rerun()
                 if st.button("❌ Delete Group"):
                     supabase.table("groups").delete().eq("id", group_obj["id"]).execute()
                     st.rerun()
-        else:
-            st.sidebar.info("🔒 You can view this public group, but only the owner can edit or delete it.")
 
     if selected_group:
         with st.sidebar.expander("✏️ Edit/Delete Group"):
             updated_tickers = st.text_input("Edit Tickers", ",".join(group_lookup[selected_group]["tickers"]))
-            share_toggle = st.checkbox("Public?", value=group_lookup[selected_group]["is_shared"])
             if st.button("Update Group"):
                 supabase.table("groups").update({
                     "tickers": [t.strip().upper() for t in updated_tickers.split(",")],
-                    "is_shared": share_toggle
+                    "is_shared": False
                 }).eq("id", group_lookup[selected_group]["id"]).execute(headers={"Authorization": f"Bearer {token}"})
                 st.rerun()
             if st.button("❌ Delete Group"):

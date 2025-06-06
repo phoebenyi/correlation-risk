@@ -15,7 +15,6 @@ An interactive dashboard built with **Streamlit** to analyze cross-asset correla
 ### ✅ Core Capabilities
 
 - **User-Specific Group Storage** - Save and manage named stock groups (e.g., "Tech Stocks", "China Exposure" tied to your account)
-- **Public Group Sharing** - Share groups by toggling the "Make Public?" checkbox
 - **Dynamic Ticker Input** – Analyse any stocks (Yahoo Finance-compatible ticker)
 - **Flexible Date Range Control** – Analyze as far back as 2010 or narrow to recent periods
 - **Customizable Return Calculations** – Compare raw price changes vs percent changes, daily/monthly/yearly
