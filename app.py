@@ -111,7 +111,7 @@ if "user" in st.session_state:
                 if st.button("Update Group"):
                     supabase.table("groups").update({
                         "tickers": [t.strip().upper() for t in updated_tickers.split(",")]
-                    }).eq("id", group_obj["id"]).execute(headers={"Authorization": f"Bearer {token}"})
+                    }).eq("id", group_obj["id"]).execute()
                     st.rerun()
                 if st.button("❌ Delete Group"):
                     supabase.table("groups").delete().eq("id", group_obj["id"]).execute()
