@@ -58,17 +58,12 @@ if st.sidebar.button(auth_action):
                 if auth_result.user.confirmed_at is None:
                     st.sidebar.warning("📧 Please confirm your email before logging in.")
                 else:
-                    # Set the session on the supabase client so RLS (auth.uid()) works
-                    supabase.auth.set_session(session.access_token, session.refresh_token)
-
-                    # Save it in Streamlit
                     st.session_state["user"] = {
                         "id": auth_result.user.id,
+                        "email": auth_result.user.email,
                         "access_token": session.access_token,
-                        "refresh_token": session.refresh_token,
-                        "email": auth_result.user.email
+                        "refresh_token": session.refresh_token
                     }
-
                     st.sidebar.success("✅ Logged in!")
                     st.rerun()
             else:
