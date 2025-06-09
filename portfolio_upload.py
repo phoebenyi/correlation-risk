@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-yimport yfinance as yf
+import yfinance as yf
 
 
 def load_portfolio_from_csv():
