@@ -286,7 +286,7 @@ if st.sidebar.button("🔍 Run Analysis"):
             st.session_state["df"] = df
             st.session_state["returns"] = returns
             st.session_state["tickers"] = returns.columns.tolist()
-
+            st.session_state["df_norm"] = df_norm
 
             # ---------------------------------------------
             # Correlation Matrix
@@ -307,6 +307,8 @@ if st.sidebar.button("🔍 Run Analysis"):
             np.fill_diagonal(pairwise_corr.values, 1.0)
 
             corr = pairwise_corr
+            st.session_state["analysis_complete"] = True
+            st.session_state["corr"] = corr
 
             st.subheader("📍 Key Correlation Highlights")
 
@@ -363,16 +365,30 @@ if st.sidebar.button("🔍 Run Analysis"):
             csv = buffer.getvalue().encode("utf-8")
             st.download_button("⬇️ Download Correlation Matrix CSV", data=csv, file_name="correlation_matrix.csv", mime="text/csv")
 
-if "returns" in st.session_state and "tickers" in st.session_state:
+if st.session_state.get("analysis_complete", False):
+    st.subheader("📊 Raw Price History Comparison")
+    st.line_chart(st.session_state["df"])
+
+    st.subheader("📊 Normalised Price History Comparison")
+    st.line_chart(st.session_state["df_norm"])
+
+    st.subheader(f"📌 {corr_type} Correlation Matrix")
+    fig = px.imshow(
+        st.session_state["corr"],
+        text_auto=".2f",
+        color_continuous_scale="RdBu_r",
+        aspect="auto",
+        title=f"{corr_type} Correlation Matrix"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Rolling correlation section
     st.subheader("🔁 Rolling Correlation Viewer")
     window = st.slider("Rolling Window (days)", 20, 180, 60, key="rolling_window")
     tickers = st.session_state["tickers"]
     returns = st.session_state["returns"]
     rolling_pairs = [(a, b) for i, a in enumerate(tickers) for b in tickers[i+1:]]
 
-    # ---------------------------------------------
-    # Rolling Correlation — dynamic pair selector
-    # ---------------------------------------------
     if rolling_pairs:
         pair = st.selectbox("Choose Pair", rolling_pairs, format_func=lambda x: f"{x[0]} vs {x[1]}", key="rolling_pair_main")
         t1, t2 = pair
