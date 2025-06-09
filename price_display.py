@@ -26,4 +26,4 @@ def offer_price_data_download(df):
     buffer_prices = io.StringIO()
     df.to_csv(buffer_prices)
     buffer_prices.seek(0)
-    st.download_button("⬇️ Download Price Data CSV", data=buffer_prices.getvalue(), file_name="prices.csv", mime="text/csv")
+    st.download_button("⬇️ Download Price Data CSV", data=buffer_prices.getvalue(), file_name="prices.csv", mime="text/csv", key="download_price_csv")
