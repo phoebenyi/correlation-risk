@@ -99,8 +99,74 @@ if "user" in st.session_state:
     groups_resp = supabase.table("groups").select("*").eq("user_id", uid).execute()
     groups = groups_resp.data
 
-    group_names = [g["group_name"] for g in groups]
+    group_names = sorted([g["group_name"] for g in groups])
     group_lookup = {g["group_name"]: g for g in groups}
+
+    with st.sidebar.expander("➕ Create New Group"):
+                new_group_name = st.text_input("New Group Name")
+                new_group_tickers = st.text_input("Tickers (comma-separated)", help="Example: AAPL, MSFT, TSLA")
+
+                if st.button("Create Group"):
+                    if new_group_name and new_group_tickers:
+                        tickers_list = [t.strip().upper() for t in new_group_tickers.split(",") if t.strip()]
+                        response = supabase.table("groups").insert({
+                            "user_id": uid,
+                            "group_name": new_group_name,
+                            "tickers": tickers_list
+                        }).execute()
+
+                        if response.status_code == 201:
+                            st.success("✅ Group created successfully!")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Failed to create group: {response}")
+                    else:
+                        st.warning("Please enter both a group name and ticker list.")
+
+    with st.sidebar.expander("📤 Upload Excel File of Stocks"):
+        uploaded_file = st.file_uploader("Upload Excel (.xlsx)", type=["xlsx"])
+        if uploaded_file:
+            try:
+                df_uploaded = pd.read_excel(uploaded_file)
+                if df_uploaded.shape[1] >= 1:
+                    uploaded_tickers = df_uploaded.iloc[:, 0].dropna().astype(str).str.upper().tolist()
+
+                    # Preview tickers
+                    st.markdown("### 📋 Parsed Tickers:")
+                    st.code(", ".join(uploaded_tickers) if uploaded_tickers else "No tickers found")
+
+                    # Default group name = filename
+                    import os
+                    suggested_name = os.path.splitext(uploaded_file.name)[0]
+                    custom_name = st.text_input("Group Name", value=suggested_name)
+
+                    # Prevent duplicate names
+                    if custom_name in group_names:
+                        st.warning("⚠️ Group name already exists. Please choose a unique name.")
+                    elif st.button("Save as Group"):
+                        if custom_name and uploaded_tickers:
+                            response = supabase.table("groups").insert({
+                                "user_id": uid,
+                                "group_name": custom_name,
+                                "tickers": uploaded_tickers
+                            }).execute()
+
+                            if response.status_code == 201:
+                                st.success(f"✅ Group '{custom_name}' created with {len(uploaded_tickers)} tickers.")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed to create group: {response}")
+                        else:
+                            st.warning("Please provide a valid group name and tickers.")
+
+                else:
+                    st.error("❌ Excel must have at least 1 column with tickers in Column A.")
+
+            except Exception as e:
+                st.error(f"❌ Failed to process Excel file: {e}")
+
+        st.markdown("📌 **Put all stock symbols in Column A (first column)**.\nExample:\nAAPL\nMSFT\nTSLA")
+
     selected_group = st.sidebar.selectbox("Select Group", group_names)
     if selected_group:
         group_obj = group_lookup[selected_group]
