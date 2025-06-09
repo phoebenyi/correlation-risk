@@ -152,34 +152,24 @@ if st.sidebar.button("🔍 Run Analysis"):
         with st.status("📥 Downloading data...", expanded=True) as status:
             failed = []
             try:
-                # Batch download all tickers at once
                 stock_data = yf.download(tickers, start=start, end=end, group_by="ticker", auto_adjust=True)
             except Exception as e:
                 st.error(f"Failed to download data: {e}")
                 stock_data = pd.DataFrame()
 
             for ticker in tickers:
-                if isinstance(stock_data.columns, pd.MultiIndex):
-                    try:
-                        val = stock_data["Close"][ticker].dropna()
-                    except KeyError:
-                        st.warning(f"⚠️ 'Close' prices not found for {ticker}.")
-                        failed.append(ticker)
-                        continue
-                else:
-                    if "Close" in stock_data.columns:
-                        val = stock_data["Close"].dropna()
-                    else:
-                        st.error(f"{ticker} has no valid price columns.")
-                        failed.append(ticker)
-                        continue
+                try:
+                    val = stock_data["Close"][ticker].dropna()
+                except Exception:
+                    st.warning(f"⚠️ 'Close' prices not found for {ticker}.")
+                    failed.append(ticker)
+                    continue
 
                 if val.empty:
                     st.error(f"{ticker} returned no data.")
                     failed.append(ticker)
                     continue
 
-                # Check for incomplete date ranges
                 actual_start = val.index.min().date()
                 actual_end = val.index.max().date()
                 user_start = pd.to_datetime(start).date()
@@ -196,13 +186,7 @@ if st.sidebar.button("🔍 Run Analysis"):
                         "Reason": reason
                     })
 
-                if isinstance(val, pd.Series):
-                    data[ticker] = val
-                elif isinstance(val, pd.DataFrame) and val.shape[1] == 1:
-                    data[ticker] = val.iloc[:, 0]
-                else:
-                    st.error(f"{ticker} has invalid format. Skipping.")
-                    failed.append(ticker)
+                data[ticker] = val
 
             status.update(label=f"✅ Download complete. ({len(tickers) - len(failed)} success, {len(failed)} failed)", state="complete")
 
