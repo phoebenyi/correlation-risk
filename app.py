@@ -151,53 +151,59 @@ if st.sidebar.button("🔍 Run Analysis"):
         incomplete_data_notes = []
         with st.status("📥 Downloading data...", expanded=True) as status:
             failed = []
+            try:
+                # Batch download all tickers at once
+                stock_data = yf.download(tickers, start=start, end=end, group_by="ticker", auto_adjust=True)
+            except Exception as e:
+                st.error(f"Failed to download data: {e}")
+                stock_data = pd.DataFrame()
+
             for ticker in tickers:
-                stock = yf.download(ticker, start=start, end=end, group_by="column", auto_adjust=True)
-
-                if not stock.empty:
-                    # Check if the date range is incomplete
-                    actual_start = stock.index.min().date()
-                    actual_end = stock.index.max().date()
-                    user_start = pd.to_datetime(start).date()
-                    user_end = pd.to_datetime(end).date()
-
-                    if (actual_start - user_start).days > threshold_days or (user_end - actual_end).days > threshold_days:
-                        reason = "IPO, delisting, or missing Yahoo data"
-                        incomplete_data_notes.append({
-                            "Ticker": ticker,
-                            "Available From": actual_start,
-                            "Available To": actual_end,
-                            "Requested From": user_start,
-                            "Requested To": user_end,
-                            "Reason": reason
-                        })
-
-                    # Extract price series
-                    if isinstance(stock.columns, pd.MultiIndex):
-                        try:
-                            val = stock["Close"][ticker].dropna()
-                        except KeyError:
-                            st.warning(f"⚠️ 'Close' prices not found for {ticker}.")
-                            failed.append(ticker)
-                            continue
-                    else:
-                        if "Close" in stock.columns:
-                            val = stock["Close"]
-                        else:
-                            st.error(f"{ticker} has no valid price columns.")
-                            failed.append(ticker)
-                            continue
-
-                    if isinstance(val, pd.Series):
-                        data[ticker] = val
-                    elif isinstance(val, pd.DataFrame) and val.shape[1] == 1:
-                        data[ticker] = val.iloc[:, 0]
-                    else:
-                        st.error(f"{ticker} has invalid format. Skipping.")
+                if isinstance(stock_data.columns, pd.MultiIndex):
+                    try:
+                        val = stock_data["Close"][ticker].dropna()
+                    except KeyError:
+                        st.warning(f"⚠️ 'Close' prices not found for {ticker}.")
                         failed.append(ticker)
+                        continue
                 else:
+                    if "Close" in stock_data.columns:
+                        val = stock_data["Close"].dropna()
+                    else:
+                        st.error(f"{ticker} has no valid price columns.")
+                        failed.append(ticker)
+                        continue
+
+                if val.empty:
                     st.error(f"{ticker} returned no data.")
                     failed.append(ticker)
+                    continue
+
+                # Check for incomplete date ranges
+                actual_start = val.index.min().date()
+                actual_end = val.index.max().date()
+                user_start = pd.to_datetime(start).date()
+                user_end = pd.to_datetime(end).date()
+
+                if (actual_start - user_start).days > threshold_days or (user_end - actual_end).days > threshold_days:
+                    reason = "IPO, delisting, or missing Yahoo data"
+                    incomplete_data_notes.append({
+                        "Ticker": ticker,
+                        "Available From": actual_start,
+                        "Available To": actual_end,
+                        "Requested From": user_start,
+                        "Requested To": user_end,
+                        "Reason": reason
+                    })
+
+                if isinstance(val, pd.Series):
+                    data[ticker] = val
+                elif isinstance(val, pd.DataFrame) and val.shape[1] == 1:
+                    data[ticker] = val.iloc[:, 0]
+                else:
+                    st.error(f"{ticker} has invalid format. Skipping.")
+                    failed.append(ticker)
+
             status.update(label=f"✅ Download complete. ({len(tickers) - len(failed)} success, {len(failed)} failed)", state="complete")
 
         if incomplete_data_notes:
