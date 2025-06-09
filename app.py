@@ -151,12 +151,6 @@ if st.sidebar.button("🔍 Run Analysis"):
         incomplete_data_notes = []
         with st.status("📥 Downloading data...", expanded=True) as status:
             failed = []
-            try:
-                stock_data = yf.download(tickers, start=start, end=end, group_by="ticker", auto_adjust=True)
-            except Exception as e:
-                st.error(f"Failed to download data: {e}")
-                stock_data = pd.DataFrame()
-
             for ticker in tickers:
                 stock = yf.download(ticker, start=start, end=end, group_by="column", auto_adjust=True)
 
@@ -178,14 +172,32 @@ if st.sidebar.button("🔍 Run Analysis"):
                             "Reason": reason
                         })
 
-                if isinstance(val, pd.Series):
-                    data[ticker] = val
-                elif isinstance(val, pd.DataFrame) and val.shape[1] == 1:
-                    data[ticker] = val.iloc[:, 0]
-                else:
-                    st.error(f"{ticker} has invalid format. Skipping.")
-                    failed.append(ticker)
+                    # Extract price series
+                    if isinstance(stock.columns, pd.MultiIndex):
+                        try:
+                            val = stock["Close"][ticker].dropna()
+                        except KeyError:
+                            st.warning(f"⚠️ 'Close' prices not found for {ticker}.")
+                            failed.append(ticker)
+                            continue
+                    else:
+                        if "Close" in stock.columns:
+                            val = stock["Close"]
+                        else:
+                            st.error(f"{ticker} has no valid price columns.")
+                            failed.append(ticker)
+                            continue
 
+                    if isinstance(val, pd.Series):
+                        data[ticker] = val
+                    elif isinstance(val, pd.DataFrame) and val.shape[1] == 1:
+                        data[ticker] = val.iloc[:, 0]
+                    else:
+                        st.error(f"{ticker} has invalid format. Skipping.")
+                        failed.append(ticker)
+                else:
+                    st.error(f"{ticker} returned no data.")
+                    failed.append(ticker)
             status.update(label=f"✅ Download complete. ({len(tickers) - len(failed)} success, {len(failed)} failed)", state="complete")
 
         if incomplete_data_notes:
