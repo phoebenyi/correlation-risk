@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 import yfinance as yf
 from risk_analysis import (
@@ -5,7 +6,8 @@ from risk_analysis import (
     compute_portfolio_risk,
     compute_benchmark_metrics,
     optimize_portfolio,
-    suggest_portfolio_tweaks
+    suggest_portfolio_tweaks,
+    compute_volatility_table
 )
 import numpy as np
 
@@ -27,6 +29,10 @@ def display_risk_and_optimization(returns_clean, start, end, portfolio_weights=N
         """)
     st.dataframe(risk_df.round(4))
 
+    st.subheader("📊 Volatility Table by Frequency (Daily → Yearly)")
+    vol_table = compute_volatility_table(returns_clean)
+    st.dataframe(vol_table.reset_index().rename(columns={'index': 'Ticker'}).round(4))
+
     # Portfolio Optimization
     st.subheader("🧠 Portfolio Optimization")
     models = {
@@ -36,19 +42,23 @@ def display_risk_and_optimization(returns_clean, start, end, portfolio_weights=N
         "Equal Volatility (EV)": "EV"
     }
     selected_model = st.selectbox("Select Optimization Model", list(models.keys()))
+    
     if portfolio_weights is not None:
         weights = portfolio_weights.values
         display_weights = pd.DataFrame({
             "Weight": portfolio_weights
         }).T
         st.info("✅ Using weights from uploaded portfolio.")
+        w_final = portfolio_weights
     else:
         w_opt = optimize_portfolio(returns_clean)
         weights = w_opt.values.flatten()
         display_weights = w_opt.T
         st.info("⚙️ Using optimized weights.")
+        w_final = w_opt.squeeze()
 
     st.dataframe(display_weights.round(4))
+
     port_std, port_var, port_cvar = compute_portfolio_risk(returns_clean, weights)
 
     st.subheader("📊 Optimized Portfolio Risk Summary")
@@ -61,7 +71,15 @@ def display_risk_and_optimization(returns_clean, start, end, portfolio_weights=N
     st.subheader("📈 Cumulative Return of Optimized Portfolio")
     st.line_chart(cumulative_returns)
 
-    # Benchmark comparison
+    st.subheader("🔁 Rolling Portfolio Volatility (20d & 60d)")
+    roll_vol_20d = weighted_returns.rolling(20).std() * np.sqrt(252)
+    roll_vol_60d = weighted_returns.rolling(60).std() * np.sqrt(252)
+    roll_vol_df = pd.DataFrame({
+        "20d Rolling Volatility": roll_vol_20d,
+        "60d Rolling Volatility": roll_vol_60d
+    }).dropna()
+    st.line_chart(roll_vol_df)
+
     st.subheader("📉 Benchmark Comparison (Beta, Correlation)")
     benchmarks = {
         "Nasdaq-100": "^NDX",
@@ -77,6 +95,6 @@ def display_risk_and_optimization(returns_clean, start, end, portfolio_weights=N
             st.warning(f"⚠️ Failed to fetch benchmark {name}: {e}")
 
     st.subheader("💬 Risk Contribution Suggestions")
-    suggestions = suggest_portfolio_tweaks(portfolio_weights if portfolio_weights is not None else w_opt.squeeze(), returns_clean)
+    suggestions = suggest_portfolio_tweaks(w_final, returns_clean)
     for s in suggestions:
         st.markdown(f"- {s}")
