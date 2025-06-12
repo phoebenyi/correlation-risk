@@ -15,15 +15,21 @@ def display_raw_price_data(df):
 
 def display_normalized_price_data(df_norm):
     st.subheader("📊 Normalised Price History Comparison")
-    df_norm = df.apply(lambda x: x / x.dropna().iloc[0] * 100 if x.dropna().shape[0] > 0 else x)
+    df_norm = df_norm.apply(lambda x: x / x.dropna().iloc[0] * 100 if x.dropna().shape[0] > 0 else x)
     st.write("📈 **Normalized Prices** – All lines start at 100. ✅ Great for comparing relative performance, ❌ loses actual price context.")
     with st.expander("🔍 View Latest Normalized Price Table"):
         st.dataframe(df_norm.tail(10).round(2))
     st.line_chart(df_norm)
 
 
-def offer_price_data_download(df):
+def offer_price_data_download(df, key_suffix=""):
     buffer_prices = io.StringIO()
     df.to_csv(buffer_prices)
     buffer_prices.seek(0)
-    st.download_button("⬇️ Download Price Data CSV", data=buffer_prices.getvalue(), file_name="prices.csv", mime="text/csv", key="download_price_csv")
+    st.download_button(
+        "⬇️ Download Price Data CSV",
+        data=buffer_prices.getvalue(),
+        file_name="prices.csv",
+        mime="text/csv",
+        key=f"download_price_csv_{key_suffix}"
+    )

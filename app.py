@@ -354,7 +354,7 @@ if st.sidebar.button("🔍 Run Analysis"):
 
             st.subheader(f"📌 {corr_type} Correlation Matrix")
             fig = plot_correlation_heatmap(corr, corr_type)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key="correlation_heatmap_main")
 
             # CSV Export
             buffer = io.StringIO()
@@ -377,7 +377,7 @@ if st.session_state.get("analysis_complete", False):
         aspect="auto",
         title=f"{corr_type} Correlation Matrix"
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="correlation_heatmap_postrun")
 
     # Rolling correlation section
     display_rolling_correlation_viewer(st.session_state["returns"], st.session_state["tickers"])
@@ -385,6 +385,11 @@ if st.session_state.get("analysis_complete", False):
     # ---------------------------------------------
     # Risk Metrics and Portfolio Optimization
     # ---------------------------------------------
+    df = st.session_state["df"]
+    df_norm = st.session_state["df_norm"]
+    returns = st.session_state["returns"]
+    tickers = st.session_state["tickers"]
+
     if riskfolio_available and len(tickers) > 1:
         returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
         if returns_clean.shape[1] < 2 or returns_clean.shape[0] < 3:

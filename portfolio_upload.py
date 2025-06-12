@@ -2,15 +2,14 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 
-
-def load_portfolio_from_csv():
+def load_portfolio_from_csv(key="portfolio_csv"):
     """
     Upload and parse a user-provided portfolio CSV with columns:
     Ticker, Shares [, Purchase Date, Price at Purchase]
     Returns cleaned DataFrame and computed weights based on latest prices.
     """
     st.subheader("📤 Upload Your Portfolio CSV")
-    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], key="portfolio_csv")
+    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], key=key)  # <-- key is passed in
 
     if not uploaded_file:
         return None, None
