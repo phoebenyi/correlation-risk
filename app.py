@@ -320,12 +320,15 @@ if st.sidebar.button("🔍 Run Analysis"):
             offer_price_data_download(df)
             df_norm = normalize_prices(df)
             display_normalized_price_data(df_norm)
-
+            
             # ---------------------------------------------
             # Return Calculation based on frequency & type
             # ---------------------------------------------
             returns = compute_returns(df, freq, abs_or_pct, overlap_window)
 
+            # ---------------------------------------------
+            # Price History Visualization
+            # ---------------------------------------------
             st.session_state["df"] = df
             st.session_state["returns"] = returns
             st.session_state["tickers"] = returns.columns.tolist()
@@ -361,23 +364,6 @@ if st.sidebar.button("🔍 Run Analysis"):
             corr.to_csv(buffer)
             csv = buffer.getvalue().encode("utf-8")
             st.download_button("⬇️ Download Correlation Matrix CSV", data=csv, file_name="correlation_matrix.csv", mime="text/csv")
-
-if st.session_state.get("analysis_complete", False):
-    st.subheader("📊 Raw Price History Comparison")
-    st.line_chart(st.session_state["df"])
-
-    st.subheader("📊 Normalised Price History Comparison")
-    st.line_chart(st.session_state["df_norm"])
-
-    st.subheader(f"📌 {corr_type} Correlation Matrix")
-    fig = px.imshow(
-        st.session_state["corr"],
-        text_auto=".2f",
-        color_continuous_scale="RdBu_r",
-        aspect="auto",
-        title=f"{corr_type} Correlation Matrix"
-    )
-    st.plotly_chart(fig, use_container_width=True, key="correlation_heatmap_postrun")
 
     # Rolling correlation section
     display_rolling_correlation_viewer(st.session_state["returns"], st.session_state["tickers"])
