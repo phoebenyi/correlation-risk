@@ -143,14 +143,6 @@ if "user" in st.session_state and st.sidebar.button("Logout"):
     supabase.auth.sign_out()
     st.rerun()
 
-with st.sidebar.expander("📤 Upload Custom Portfolio (CSV)"):
-    st.markdown("CSV must include **Ticker** and **Shares** columns. Optionally: Purchase Date, Price at Purchase.")
-    st.markdown("Example:")
-    st.code("Ticker,Shares\nAAPL,50\nTSLA,30\nMSFT,20")
-    portfolio_df, portfolio_weights = load_portfolio_from_csv()
-
-tickers = []
-
 if "user" in st.session_state:
     user = st.session_state.get("user")
     uid = user.get("id") if user else None
@@ -163,6 +155,7 @@ if "user" in st.session_state:
     except Exception:
         st.sidebar.warning("⚠️ Failed to retrieve user email.")
 
+    
     st.sidebar.subheader("📁 Your Groups")
 
     uid = st.session_state["user"].get("id")
@@ -192,67 +185,37 @@ if "user" in st.session_state:
                             st.error(f"❌ Failed to create group: {response}")
                     else:
                         st.warning("Please enter both a group name and ticker list.")
+    
+    with st.sidebar.expander("📤 Upload Your Portfolio (CSV) or Use a Group"):
+        st.markdown("CSV must include **Ticker** and **Shares** columns. Example:")
+        st.code("Ticker,Shares\nAAPL,50\nTSLA,30")
+        source_choice = st.radio("Choose Input Method", ["Upload CSV", "Use Group"])
 
-    with st.sidebar.expander("📤 Upload Excel File of Stocks"):
-        uploaded_file = st.file_uploader("Upload Excel (.xlsx)", type=["xlsx"])
-        if uploaded_file:
-            try:
-                df_uploaded = pd.read_excel(uploaded_file)
-                if df_uploaded.shape[1] >= 1:
-                    uploaded_tickers = df_uploaded.iloc[:, 0].dropna().astype(str).str.upper().tolist()
+        tickers = []
+        portfolio_weights = None
 
-                    # Preview tickers
-                    st.markdown("### 📋 Parsed Tickers:")
-                    st.code(", ".join(uploaded_tickers) if uploaded_tickers else "No tickers found")
+        if source_choice == "Upload CSV":
+            portfolio_df, portfolio_weights = load_portfolio_from_csv()
+            if portfolio_df is not None:
+                tickers = portfolio_df["Ticker"].tolist()
 
-                    # Default group name = filename
-                    import os
-                    suggested_name = os.path.splitext(uploaded_file.name)[0]
-                    custom_name = st.text_input("Group Name", value=suggested_name)
+        elif source_choice == "Use Group":
+            selected_group = st.selectbox("Select Group", group_names)
+            if selected_group:
+                group_obj = group_lookup[selected_group]
+                tickers = group_obj["tickers"]
+                if group_obj["user_id"] == st.session_state["user"]["id"]:
+                    with st.sidebar.expander("✏️ Edit/Delete Group"):
+                        updated_tickers = st.text_input("Edit Tickers", ",".join(group_obj["tickers"]))
+                        if st.button("Update Group"):
+                            supabase.table("groups").update({
+                                "tickers": [t.strip().upper() for t in updated_tickers.split(",")]
+                            }).eq("id", group_obj["id"]).execute()
+                            st.rerun()
+                        if st.button("❌ Delete Group"):
+                            supabase.table("groups").delete().eq("id", group_obj["id"]).execute()
+                            st.rerun()
 
-                    # Prevent duplicate names
-                    if custom_name in group_names:
-                        st.warning("⚠️ Group name already exists. Please choose a unique name.")
-                    elif st.button("Save as Group"):
-                        if custom_name and uploaded_tickers:
-                            response = supabase.table("groups").insert({
-                                "user_id": uid,
-                                "group_name": custom_name,
-                                "tickers": uploaded_tickers
-                            }).execute()
-
-                            if response.status_code == 201:
-                                st.success(f"✅ Group '{custom_name}' created with {len(uploaded_tickers)} tickers.")
-                                st.rerun()
-                            else:
-                                st.error(f"❌ Failed to create group: {response}")
-                        else:
-                            st.warning("Please provide a valid group name and tickers.")
-
-                else:
-                    st.error("❌ Excel must have at least 1 column with tickers in Column A.")
-
-            except Exception as e:
-                st.error(f"❌ Failed to process Excel file: {e}")
-
-        st.markdown("📌 **Put all stock symbols in Column A (first column)**.\nExample:\nAAPL\nMSFT\nTSLA")
-
-    selected_group = st.sidebar.selectbox("Select Group", group_names)
-    if selected_group:
-        group_obj = group_lookup[selected_group]
-        tickers = group_obj["tickers"]
-        # Only allow editing if user is the group owner
-        if "user" in st.session_state and group_obj["user_id"] == st.session_state["user"]["id"]:
-            with st.sidebar.expander("✏️ Edit/Delete Group"):
-                updated_tickers = st.text_input("Edit Tickers", ",".join(group_obj["tickers"]))
-                if st.button("Update Group"):
-                    supabase.table("groups").update({
-                        "tickers": [t.strip().upper() for t in updated_tickers.split(",")]
-                    }).eq("id", group_obj["id"]).execute()
-                    st.rerun()
-                if st.button("❌ Delete Group"):
-                    supabase.table("groups").delete().eq("id", group_obj["id"]).execute()
-                    st.rerun()
 else:
     st.sidebar.info("Please log in to manage groups.")
 

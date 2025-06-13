@@ -32,7 +32,8 @@ def load_portfolio_from_csv(key="portfolio_csv"):
             try:
                 data = yf.download(ticker, period="1d", auto_adjust=True, progress=False)
                 if not data.empty and "Close" in data.columns:
-                    latest_prices[ticker] = data["Close"].dropna().iloc[-1]
+                    close_price = data["Close"].dropna()
+                    latest_prices[ticker] = float(close_price.iloc[-1]) if not close_price.empty else np.nan
                 else:
                     st.warning(f"⚠️ Could not fetch price for {ticker}")
             except Exception as e:
@@ -45,7 +46,8 @@ def load_portfolio_from_csv(key="portfolio_csv"):
 
         st.success("✅ Portfolio loaded and weights calculated.")
         st.dataframe(df[["Ticker", "Shares", "Latest Price", "Market Value", "Weight"]].round(4))
-
+        df = df.drop_duplicates(subset=["Ticker"])
+        df["Weight"] = pd.to_numeric(df["Weight"], errors="coerce")
         return df, df.set_index("Ticker")["Weight"]
 
     except Exception as e:

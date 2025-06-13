@@ -124,11 +124,12 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
 
         st.markdown("These are enforced in the optimization solver (e.g., using `riskfolio-lib`).")
     
-    if portfolio_weights is not None:
+    if portfolio_weights is not None and isinstance(portfolio_weights, pd.Series):
+        portfolio_weights = portfolio_weights.dropna()
+        portfolio_weights = portfolio_weights[portfolio_weights > 0]
         weights = portfolio_weights.values
-        display_weights = pd.DataFrame({
-            "Weight": portfolio_weights
-        }).T
+        display_weights = pd.DataFrame({"Ticker": portfolio_weights.index, "Weight": portfolio_weights.values})
+        display_weights.set_index("Ticker", inplace=True)
         st.info("✅ Using weights from uploaded portfolio.")
         w_final = portfolio_weights
     else:
@@ -143,26 +144,43 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
 
     st.subheader("📊 Portfolio Weights Breakdown")
 
-    display_weights_clean = display_weights.T.reset_index()
-    display_weights_clean.columns = ["Ticker", "Weight"]
-    display_weights_clean = display_weights_clean.dropna()
-    display_weights_clean = display_weights_clean[display_weights_clean["Weight"] > 0]
+    try:
+        # If it's an optimized portfolio (DataFrame), transform it
+        if isinstance(display_weights, pd.DataFrame) and display_weights.shape[0] == 1:
+            display_weights_clean = display_weights.T.reset_index()
+            display_weights_clean.columns = ["Ticker", "Weight"]
+        elif isinstance(display_weights, pd.DataFrame):
+            display_weights_clean = display_weights.reset_index()
+            display_weights_clean.columns = ["Ticker", "Weight"]
+        else:
+            # If it's a Series, convert directly
+            display_weights_clean = pd.DataFrame({
+                "Ticker": portfolio_weights.index,
+                "Weight": portfolio_weights.values
+            })
 
-    st.markdown("### 🧪 Debug: Editable Portfolio Weights")
-    edited_weights = st.data_editor(display_weights_clean, num_rows="dynamic", key="editable_weights")
+        # Clean and filter
+        display_weights_clean = display_weights_clean.dropna()
+        display_weights_clean = display_weights_clean[display_weights_clean["Weight"] > 0]
+        display_weights_clean = display_weights_clean.sort_values(by="Weight", ascending=False)
 
-    col1, col2 = st.columns(2)
+        st.markdown("### 🧪 Debug: Editable Portfolio Weights")
+        edited_weights = st.data_editor(display_weights_clean, num_rows="dynamic", key="editable_weights")
 
-    with col1:
-        st.markdown("### 🥧 Pie Chart")
-        fig_pie = px.pie(edited_weights, names="Ticker", values="Weight")
-        st.plotly_chart(fig_pie, use_container_width=True)
+        col1, col2 = st.columns(2)
 
-    with col2:
-        st.markdown("### 📊 Bar Chart")
-        fig_bar = px.bar(edited_weights, x="Ticker", y="Weight", text="Weight", labels={"Weight": "Weight %"})
-        st.plotly_chart(fig_bar, use_container_width=True)
+        with col1:
+            st.markdown("### 🥧 Pie Chart")
+            fig_pie = px.pie(edited_weights, names="Ticker", values="Weight")
+            st.plotly_chart(fig_pie, use_container_width=True)
 
+        with col2:
+            st.markdown("### 📊 Bar Chart")
+            fig_bar = px.bar(edited_weights, x="Ticker", y="Weight", text="Weight", labels={"Weight": "Weight %"})
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"❌ Failed to render portfolio weight breakdown: {e}")
 
     # Optimized Portfolio
     opt_weights = w_final
