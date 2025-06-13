@@ -26,17 +26,17 @@ def load_portfolio_from_csv(key="portfolio_csv"):
         df = df.dropna(subset=["Ticker", "Shares"])
 
         tickers = df["Ticker"].tolist()
-        prices = yf.download(tickers, period="1d", group_by="ticker", auto_adjust=True, threads=False)
-
         latest_prices = {}
+
         for ticker in tickers:
             try:
-                if isinstance(prices.columns, pd.MultiIndex):
-                    latest_prices[ticker] = prices["Close"][ticker].dropna().iloc[-1]
+                data = yf.download(ticker, period="1d", auto_adjust=True, progress=False)
+                if not data.empty and "Close" in data.columns:
+                    latest_prices[ticker] = data["Close"].dropna().iloc[-1]
                 else:
-                    latest_prices[ticker] = prices["Close"].dropna().iloc[-1]
-            except:
-                st.warning(f"⚠️ Could not fetch price for {ticker}")
+                    st.warning(f"⚠️ Could not fetch price for {ticker}")
+            except Exception as e:
+                st.warning(f"⚠️ Error fetching {ticker}: {e}")
 
         df["Latest Price"] = df["Ticker"].map(latest_prices)
         df["Market Value"] = df["Shares"] * df["Latest Price"]

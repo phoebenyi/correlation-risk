@@ -33,6 +33,46 @@ from risk_analysis import (
 
 from risk_display import display_risk_and_optimization
 
+def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights):
+                # Price Visuals
+                display_raw_price_data(df)
+                offer_price_data_download(df)
+                display_normalized_price_data(df_norm)
+
+                # Correlation Matrix
+                st.subheader("📍 Key Correlation Highlights")
+                corr_type = st.session_state.get("corr_type", "Pearson")
+                corr = compute_pairwise_correlation(returns, method=corr_type)
+                st.session_state["corr"] = corr
+                corr_flat = flatten_correlation_matrix(corr)
+                top_pos, top_neg, strong_corr = get_top_correlations(corr_flat)
+
+                st.markdown("### 🔝 Top 5 Positively Correlated Pairs")
+                st.dataframe(top_pos.reset_index(drop=True).round(3))
+
+                st.markdown("### 🔻 Top 5 Negatively Correlated Pairs")
+                st.dataframe(top_neg.reset_index(drop=True).round(3))
+
+                st.markdown("### ⚠️ Pairs with |Correlation| > 0.8")
+                st.dataframe(strong_corr.reset_index(drop=True).round(3))
+
+                st.subheader(f"📌 {corr_type} Correlation Matrix")
+                fig = plot_correlation_heatmap(corr, corr_type)
+                st.plotly_chart(fig, use_container_width=True, key="correlation_heatmap_main")
+
+                # Rolling Correlation Viewer
+                display_rolling_correlation_viewer(returns, tickers)
+
+                # Risk & Optimization
+                if riskfolio_available and len(tickers) > 1:
+                    returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
+                    if returns_clean.shape[1] >= 2 and returns_clean.shape[0] >= 3:
+                        display_risk_and_optimization(returns_clean, start, end, portfolio_weights)
+                    else:
+                        st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio.")
+                elif not riskfolio_available:
+                    st.warning("Install `riskfolio-lib` to enable risk metrics and optimization.")
+
 # Securely load from .streamlit/secrets.toml
 SUPABASE_URL = st.secrets["supabase"]["url"]
 SUPABASE_KEY = st.secrets["supabase"]["key"]
@@ -306,82 +346,31 @@ if st.sidebar.button("🔍 Run Analysis"):
             st.error("❌ No valid data downloaded.")
         else:
             df = pd.DataFrame(data)
+            df_norm = normalize_prices(df)
+            returns = compute_returns(df, freq, abs_or_pct, overlap_window)
             st.write(f"📊 Data range in df: {df.index.min().date()} to {df.index.max().date()}")
             buffer_prices = io.StringIO()
             df.to_csv(buffer_prices)
             buffer_prices.seek(0)
             st.download_button("⬇️ Download Price Data CSV", data=buffer_prices.getvalue(), file_name="prices.csv", mime="text/csv")
 
-            # ---------------------------------------------
-            # Price History Visualization
-            # ---------------------------------------------
-
-            display_raw_price_data(df)
-            offer_price_data_download(df)
-            df_norm = normalize_prices(df)
-            display_normalized_price_data(df_norm)
-            
-            # ---------------------------------------------
-            # Return Calculation based on frequency & type
-            # ---------------------------------------------
-            returns = compute_returns(df, freq, abs_or_pct, overlap_window)
-
-            # ---------------------------------------------
-            # Price History Visualization
-            # ---------------------------------------------
             st.session_state["df"] = df
             st.session_state["returns"] = returns
-            st.session_state["tickers"] = returns.columns.tolist()
             st.session_state["df_norm"] = df_norm
-
-            # ---------------------------------------------
-            # Correlation Matrix
-            # ---------------------------------------------
-            corr = compute_pairwise_correlation(returns, method=corr_type)
-            st.session_state["corr"] = corr
+            st.session_state["tickers"] = returns.columns.tolist()
+            st.session_state["start"] = start
+            st.session_state["end"] = end
+            st.session_state["portfolio_weights"] = portfolio_weights
+            st.session_state["corr_type"] = corr_type
             st.session_state["analysis_complete"] = True
 
-            st.subheader("📍 Key Correlation Highlights")
-
-            corr_flat = flatten_correlation_matrix(corr)
-            top_pos, top_neg, strong_corr = get_top_correlations(corr_flat)
-
-            st.markdown("### 🔝 Top 5 Positively Correlated Pairs")
-            st.dataframe(top_pos.reset_index(drop=True).round(3))
-
-            st.markdown("### 🔻 Top 5 Negatively Correlated Pairs")
-            st.dataframe(top_neg.reset_index(drop=True).round(3))
-
-            st.markdown("### ⚠️ Pairs with |Correlation| > 0.8")
-            st.dataframe(strong_corr.reset_index(drop=True).round(3))
-
-            st.subheader(f"📌 {corr_type} Correlation Matrix")
-            fig = plot_correlation_heatmap(corr, corr_type)
-            st.plotly_chart(fig, use_container_width=True, key="correlation_heatmap_main")
-
-            # CSV Export
-            buffer = io.StringIO()
-            corr.to_csv(buffer)
-            csv = buffer.getvalue().encode("utf-8")
-            st.download_button("⬇️ Download Correlation Matrix CSV", data=csv, file_name="correlation_matrix.csv", mime="text/csv")
-
-    # Rolling correlation section
-    if st.session_state.get("analysis_complete") and "returns" in st.session_state and "tickers" in st.session_state:
-        display_rolling_correlation_viewer(st.session_state["returns"], st.session_state["tickers"])
-
-    # ---------------------------------------------
-    # Risk Metrics and Portfolio Optimization
-    # ---------------------------------------------
-    df = st.session_state["df"]
-    df_norm = st.session_state["df_norm"]
-    returns = st.session_state["returns"]
-    tickers = st.session_state["tickers"]
-
-    if riskfolio_available and len(tickers) > 1:
-        returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
-        if returns_clean.shape[1] < 2 or returns_clean.shape[0] < 3:
-            st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio. Need ≥ 2 assets and ≥ 3 return periods.")
-        else:
-            display_risk_and_optimization(returns_clean, start, end, portfolio_weights)
-    elif not riskfolio_available:
-        st.warning("Install `riskfolio-lib` to enable risk metrics and optimization.")
+if st.session_state.get("analysis_complete"):
+    render_results(
+        df=st.session_state["df"],
+        returns=st.session_state["returns"],
+        df_norm=st.session_state["df_norm"],
+        tickers=st.session_state["tickers"],
+        start=st.session_state["start"],
+        end=st.session_state["end"],
+        portfolio_weights=st.session_state.get("portfolio_weights")
+    )
