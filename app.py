@@ -366,7 +366,8 @@ if st.sidebar.button("🔍 Run Analysis"):
             st.download_button("⬇️ Download Correlation Matrix CSV", data=csv, file_name="correlation_matrix.csv", mime="text/csv")
 
     # Rolling correlation section
-    display_rolling_correlation_viewer(st.session_state["returns"], st.session_state["tickers"])
+    if st.session_state.get("analysis_complete") and "returns" in st.session_state and "tickers" in st.session_state:
+        display_rolling_correlation_viewer(st.session_state["returns"], st.session_state["tickers"])
 
     # ---------------------------------------------
     # Risk Metrics and Portfolio Optimization

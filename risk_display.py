@@ -132,7 +132,8 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
         st.info("✅ Using weights from uploaded portfolio.")
         w_final = portfolio_weights
     else:
-        w_opt = optimize_portfolio(returns_clean)
+        model_key = models[selected_model]
+        w_opt = optimize_portfolio(returns_clean, method=model_key)
         weights = w_opt.values.flatten()
         display_weights = w_opt.T
         st.info("⚙️ Using optimized weights.")
@@ -144,18 +145,24 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
 
     display_weights_clean = display_weights.T.reset_index()
     display_weights_clean.columns = ["Ticker", "Weight"]
+    display_weights_clean = display_weights_clean.dropna()
+    display_weights_clean = display_weights_clean[display_weights_clean["Weight"] > 0]
+
+    st.markdown("### 🧪 Debug: Editable Portfolio Weights")
+    edited_weights = st.data_editor(display_weights_clean, num_rows="dynamic", key="editable_weights")
 
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("### 🥧 Pie Chart")
-        fig_pie = px.pie(display_weights_clean, names="Ticker", values="Weight")
+        fig_pie = px.pie(edited_weights, names="Ticker", values="Weight")
         st.plotly_chart(fig_pie, use_container_width=True)
 
     with col2:
         st.markdown("### 📊 Bar Chart")
-        fig_bar = px.bar(display_weights_clean, x="Ticker", y="Weight", text="Weight", labels={"Weight": "Weight %"})
+        fig_bar = px.bar(edited_weights, x="Ticker", y="Weight", text="Weight", labels={"Weight": "Weight %"})
         st.plotly_chart(fig_bar, use_container_width=True)
+
 
     # Optimized Portfolio
     opt_weights = w_final
