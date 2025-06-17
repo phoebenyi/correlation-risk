@@ -32,6 +32,7 @@ from risk_analysis import (
 )
 
 from risk_display import display_risk_and_optimization
+import datetime
 
 def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights):
                 # Price Visuals
@@ -60,6 +61,43 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
                 fig = plot_correlation_heatmap(corr, corr_type)
                 st.plotly_chart(fig, use_container_width=True, key="correlation_heatmap_main")
 
+                # Cross-Sector Correlation (TWSC-style)
+                if "portfolio_classifications" in st.session_state:
+                    class_map = st.session_state["portfolio_classifications"]
+
+                    if class_map is not None:
+                        st.subheader("🧠 Thematic / Sector Correlation Analysis (TWSC)")
+
+                        tickers_with_class = [t for t in returns.columns if t in class_map.index]
+                        returns_classified = returns[tickers_with_class]
+                        class_map_filtered = class_map.loc[tickers_with_class]
+
+                        corr = compute_pairwise_correlation(returns_classified)
+                        corr_values = corr.stack().reset_index()
+                        corr_values.columns = ["Ticker A", "Ticker B", "Correlation"]
+                        corr_values["Class A"] = corr_values["Ticker A"].map(class_map_filtered)
+                        corr_values["Class B"] = corr_values["Ticker B"].map(class_map_filtered)
+
+                        # Filter for A ≠ B
+                        corr_values = corr_values[corr_values["Ticker A"] != corr_values["Ticker B"]]
+
+                        # Group-to-Group Average Correlation Table
+                        grouped_corr = corr_values.groupby(["Class A", "Class B"])["Correlation"].mean().unstack().round(2)
+                        st.markdown("### 🧾 Average Correlation Between Groups")
+                        st.dataframe(grouped_corr.fillna("-"))
+
+                        # Heatmap
+                        try:
+                            fig = px.imshow(
+                                grouped_corr,
+                                text_auto=True,
+                                title="Cross-Group Correlation Heatmap (TWSC)",
+                                color_continuous_scale="RdBu_r"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"Failed to render sector heatmap: {e}")
+
                 # Rolling Correlation Viewer
                 display_rolling_correlation_viewer(returns, tickers)
 
@@ -68,6 +106,61 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
                     returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
                     if returns_clean.shape[1] >= 2 and returns_clean.shape[0] >= 3:
                         display_risk_and_optimization(returns_clean, start, end, portfolio_weights)
+                        st.subheader("🕰️ Portfolio Comparison: Today vs 3 Months Ago")
+
+                        if portfolio_weights is not None:
+                            try:
+                                three_months_ago = pd.to_datetime(end) - pd.DateOffset(months=3)
+                                returns.index = pd.to_datetime(returns.index)
+                                recent_returns = returns[returns.index >= three_months_ago]
+                                old_returns = returns[returns.index < three_months_ago]
+
+                                def get_portfolio_stats(ret_data, weights):
+                                    port_ret = ret_data.dot(weights)
+                                    if port_ret.empty:
+                                        return {
+                                            "Cumulative Return": np.nan,
+                                            "Std Dev": np.nan,
+                                            "VaR (95%)": np.nan,
+                                            "CVaR (95%)": np.nan,
+                                            "Sharpe": np.nan,
+                                            "Median Return": np.nan
+                                        }
+                                    cumret = (1 + port_ret).cumprod()
+                                    std = port_ret.std() * np.sqrt(252)
+                                    var = np.percentile(port_ret, 5)
+                                    cvar = port_ret[port_ret <= var].mean()
+                                    sharpe = port_ret.mean() / port_ret.std() * np.sqrt(252)
+                                    median = np.median(port_ret)
+                                    return {
+                                        "Cumulative Return": cumret.iloc[-1],
+                                        "Std Dev": std,
+                                        "VaR (95%)": var,
+                                        "CVaR (95%)": cvar,
+                                        "Sharpe": sharpe,
+                                        "Median Return": median
+                                    }
+
+                                today_stats = get_portfolio_stats(recent_returns, portfolio_weights)
+                                past_stats = get_portfolio_stats(old_returns, portfolio_weights)
+
+                                stats_df = pd.DataFrame([past_stats, today_stats], index=["3 Months Ago", "Today"]).T
+                                st.dataframe(stats_df.round(4))
+
+                                chart_df = pd.DataFrame({
+                                    "Today": (1 + recent_returns.dot(portfolio_weights)).cumprod(),
+                                    "3 Months Ago": (1 + old_returns.dot(portfolio_weights)).cumprod()
+                                }).dropna()
+
+                                # Normalize both to start at 100
+                                if not chart_df.empty:
+                                    chart_df = chart_df / chart_df.iloc[0] * 100
+                                    st.line_chart(chart_df)
+                                else:
+                                    st.warning("📉 Not enough data to compare performance over time.")
+
+                            except Exception as e:
+                                st.warning(f"❌ Failed to compute historical comparison: {e}")
                     else:
                         st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio.")
                 elif not riskfolio_available:
@@ -195,9 +288,10 @@ if "user" in st.session_state:
         portfolio_weights = None
 
         if source_choice == "Upload CSV":
-            portfolio_df, portfolio_weights = load_portfolio_from_csv()
+            portfolio_df, portfolio_weights, classifications = load_portfolio_from_csv()
             if portfolio_df is not None:
                 tickers = portfolio_df["Ticker"].tolist()
+                st.session_state["portfolio_classifications"] = classifications
 
         elif source_choice == "Use Group":
             selected_group = st.selectbox("Select Group", group_names)

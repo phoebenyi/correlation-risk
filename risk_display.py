@@ -11,6 +11,43 @@ from risk_analysis import (
 )
 import numpy as np
 import plotly.express as px
+from risk_analysis import compute_concentration_risk
+from risk_analysis import compute_benchmark_metrics
+
+def show_benchmark_metrics(portfolio_name, portfolio_returns, benchmarks, start, end, label_emoji=False):
+    metrics = []
+
+    for name, symbol in benchmarks.items():
+        try:
+            bm_data = yf.download(symbol, start=start, end=end)["Close"].pct_change().dropna()
+            beta, corr = compute_benchmark_metrics(portfolio_returns, bm_data)
+
+            aligned = pd.concat([portfolio_returns, bm_data], axis=1).dropna()
+            R_p = aligned.iloc[:, 0].mean() * 252
+            R_m = aligned.iloc[:, 1].mean() * 252
+            alpha = R_p - beta * R_m
+            emoji = "🟢" if alpha > 0 else "🔴" if label_emoji else ""
+
+            metrics.append({
+                "Benchmark": name,
+                "Alpha": alpha,
+                "Beta": beta,
+                "Correlation": corr,
+                "Emoji": emoji
+            })
+
+            if label_emoji:
+                st.markdown(f"""
+                ### {name}
+                - 📈 **Alpha**: {alpha:.2%} {emoji}  
+                - 📐 **Beta**: {beta:.3f}  
+                - 🔗 **Correlation**: {corr:.3f}
+                """)
+
+        except Exception as e:
+            st.warning(f"⚠️ Failed to fetch benchmark {name} for {portfolio_name}: {e}")
+
+    return metrics
 
 def display_risk_and_optimization(returns_clean, start, end, portfolio_weights=None):
     st.subheader("📉 Risk Metrics per Asset (VaR, CVaR, Sharpe)")
@@ -25,6 +62,7 @@ def display_risk_and_optimization(returns_clean, start, end, portfolio_weights=N
 
         st.markdown("**Sharpe Ratio (Annualized)**:")
         st.latex(r"\text{Sharpe} = \frac{E[R] - R_f}{\sigma} \cdot \sqrt{252}")
+    risk_df = risk_df[["VaR_0.05", "CVaR_0.05", "Sharpe", "Median"]]
     st.dataframe(risk_df.round(4))
 
     st.subheader("📊 Volatility Table by Frequency (Daily → Yearly)")
@@ -54,6 +92,25 @@ def display_risk_and_optimization(returns_clean, start, end, portfolio_weights=N
         st.latex(r"\text{Annualized Volatility} = \text{Std Dev} \times \sqrt{\text{Periods per Year}}")
     vol_table = compute_volatility_table(returns_clean)
     st.dataframe(vol_table.reset_index().rename(columns={'index': 'Ticker'}).round(4))
+
+    st.subheader("📆 Longitudinal Volatility (Rolling Windows)")
+    with st.expander("ℹ️ What This Shows"):
+        st.markdown("""
+    This table shows **recent volatility** for each asset based on different trailing periods:
+
+    - **63d** ≈ 3 months
+    - **126d** ≈ 6 months
+    - **252d** ≈ 1 year
+
+    Volatility is computed as:
+    \\[
+    \\text{Rolling Volatility} = \\text{StdDev}(R_{t:t-w}) \\times \\sqrt{252}
+    \\]
+    """)
+
+    from risk_analysis import compute_longitudinal_volatility
+    long_vol = compute_longitudinal_volatility(returns_clean)
+    st.dataframe(long_vol.pivot(index="Ticker", columns="Window", values="Volatility").round(4))
 
     st.subheader("🧠 Portfolio Optimization")
     models = {
@@ -191,6 +248,7 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
     opt_sharpe = (opt_returns.mean() * 252) / (opt_returns.std() * np.sqrt(252))
     opt_var = np.percentile(opt_returns, 5)
     opt_cvar = opt_returns[opt_returns <= opt_var].mean()
+    opt_median = np.median(opt_returns)
 
     # Uploaded Portfolio (if any)
     if portfolio_weights is not None:
@@ -206,9 +264,9 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
         # Comparison Table
         st.subheader("📊 Uploaded vs Optimized Portfolio Performance")
         compare_df = pd.DataFrame({
-            "Metric": ["Annualized Std Dev", "Sharpe Ratio", "VaR (95%)", "CVaR (95%)"],
-            "Uploaded Portfolio": [up_std, up_sharpe, up_var, up_cvar],
-            "Optimized Portfolio": [opt_std, opt_sharpe, opt_var, opt_cvar]
+            "Metric": ["Annualized Std Dev", "Sharpe Ratio", "VaR (95%)", "CVaR (95%)", "Median Return"],
+            "Uploaded Portfolio": [up_std, up_sharpe, up_var, up_cvar, np.median(up_returns)],
+            "Optimized Portfolio": [opt_std, opt_sharpe, opt_var, opt_cvar, opt_median]
         })
         st.dataframe(compare_df.set_index("Metric").applymap(lambda x: f"{x:.2%}" if "Dev" in str(x) or "VaR" in str(x) else round(x, 4)))
 
@@ -224,6 +282,26 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
 
     # Optimized Portfolio Risk Summary (FIXED VARIABLES)
     st.subheader("📊 Optimized Portfolio Risk Summary")
+    hhi, hhi_norm = compute_concentration_risk(weights)
+
+    st.metric("Herfindahl Index (HHI)", f"{hhi:.4f}")
+    st.metric("Normalized HHI", f"{hhi_norm:.2%}")
+
+    with st.expander("ℹ️ What is Concentration Risk?"):
+        st.markdown("""
+    - **HHI (Herfindahl-Hirschman Index)** measures how concentrated your portfolio is.
+    - A value close to **1** indicates high concentration (e.g., most capital in one asset).
+    - A value closer to **1/N** (where N is number of assets) suggests even diversification.
+
+    \\[
+    \\text{HHI} = \\sum w_i^2 \\quad\\text{(higher = more concentrated)}
+    \\]
+
+    \\[
+    \\text{Normalized HHI} = \\frac{HHI - \\frac{1}{N}}{1 - \\frac{1}{N}}
+    \\quad\\in [0, 1]
+    \\]
+    """)
     with st.expander("ℹ️ What These Metrics Mean & How They're Calculated"):
         st.markdown("**📊 Optimized Portfolio Risk Summary** provides key metrics to understand the risk-return profile of the optimized portfolio:")
 
@@ -262,32 +340,73 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
     }).dropna()
     st.line_chart(roll_vol_df)
 
-    st.subheader("📉 Benchmark Comparison (Beta, Correlation)")
     benchmarks = {
         "Nasdaq-100": "^NDX",
         "S&P 500": "^GSPC",
         "SNCP": "^STI"
     }
-    with st.expander("ℹ️ Beta vs Correlation – What's the Difference?"):
-        st.markdown("**Beta** measures how sensitive the portfolio is to market movements:")
-        st.latex(r"\beta = \frac{\text{Cov}(R_p, R_b)}{\text{Var}(R_b)}")
 
-        st.markdown("""
-    - β = 1 → moves in sync with benchmark  
-    - β < 1 → less sensitive  
-    - β > 1 → more volatile
+    st.subheader("📉 Benchmark Comparison (Alpha, Beta, Correlation)")
 
-    **Correlation** shows direction of movement between portfolio and benchmark.  
-    Value ranges from -1 (opposite) to +1 (perfect sync).
-    """)
-    for name, symbol in benchmarks.items():
-        try:
-            bm = yf.download(symbol, start=start, end=end)["Close"].pct_change().dropna()
-            beta, corr = compute_benchmark_metrics(weighted_returns, bm)
-            st.markdown(f"**{name}**  \n📐 Beta: `{beta:.3f}`  \n🔗 Correlation: `{corr:.3f}`")
-        except Exception as e:
-            st.warning(f"⚠️ Failed to fetch benchmark {name}: {e}")
+    with st.expander("ℹ️ What Do These Metrics Mean?"):
+        st.markdown("### 📐 Alpha, Beta, Correlation")
 
+        st.markdown("**• Alpha (α)**: Excess return above what the market explains (positive α = outperformance):")
+        st.latex(r"\alpha = R_p - \beta R_m")
+
+        st.markdown("**• Beta (β)**: Sensitivity to market movements:")
+        st.latex(r"\beta = \frac{\text{Cov}(R_p, R_m)}{\text{Var}(R_m)}")
+
+        st.markdown("**• Correlation**: Measures directional co-movement with the benchmark, in range [-1, +1].")
+
+    st.subheader("📊 Alpha/Beta/Correlation Table (Optimized & Uploaded Portfolios)")
+
+    combined_data = []
+
+    opt_metrics = show_benchmark_metrics("Optimized Portfolio", weighted_returns, benchmarks, start, end, label_emoji=True)
+
+    if portfolio_weights is not None:
+        up_port_ret = returns_clean.dot(portfolio_weights)
+        up_metrics = show_benchmark_metrics("Uploaded Portfolio", up_port_ret, benchmarks, start, end, label_emoji=False)
+    else:
+        up_metrics = []
+
+    for row in opt_metrics:
+        combined_data.append({
+            "Benchmark": row["Benchmark"],
+            "Alpha (Optimized)": row["Alpha"],
+            "Beta (Optimized)": row["Beta"],
+            "Correlation (Optimized)": row["Correlation"]
+        })
+
+    if portfolio_weights is not None:
+        for idx, row in enumerate(up_metrics):
+            combined_data[idx]["Alpha (Uploaded)"] = row["Alpha"]
+            combined_data[idx]["Beta (Uploaded)"] = row["Beta"]
+            combined_data[idx]["Correlation (Uploaded)"] = row["Correlation"]
+
+    combined_df = pd.DataFrame(combined_data)
+    st.dataframe(combined_df.round(4))
+
+    benchmark_df = pd.DataFrame(opt_metrics)
+    benchmark_df_display = benchmark_df.copy()
+    benchmark_df_display["Alpha"] = benchmark_df_display["Alpha"].apply(lambda x: f"{x:.2%}")
+    benchmark_df_display["Beta"] = benchmark_df_display["Beta"].apply(lambda x: f"{x:.3f}")
+    benchmark_df_display["Correlation"] = benchmark_df_display["Correlation"].apply(lambda x: f"{x:.3f}")
+
+    if combined_data:
+        st.subheader("📄 Exportable Alpha/Beta/Correlation Table (Optimized Portfolio)")
+
+        st.download_button(
+            "⬇️ Download Benchmark Alpha/Beta/Correlation CSV",
+            pd.DataFrame(combined_data).to_csv(index=False),
+            file_name="alpha_beta_correlation_comparison.csv",
+            mime="text/csv"
+        )
+
+        top_alpha_row = max(opt_metrics, key=lambda x: x["Alpha"])
+        st.success(f"🏆 **Top Benchmark Outperformance**: {top_alpha_row['Benchmark']} with Alpha = {top_alpha_row['Alpha']:.2%}")
+                
     st.subheader("💬 Risk Contribution Suggestions")
     with st.expander("ℹ️ How These Suggestions Are Generated"):
         st.markdown("""

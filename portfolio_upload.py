@@ -5,21 +5,21 @@ import yfinance as yf
 def load_portfolio_from_csv(key="portfolio_csv"):
     """
     Upload and parse a user-provided portfolio CSV with columns:
-    Ticker, Shares [, Purchase Date, Price at Purchase]
-    Returns cleaned DataFrame and computed weights based on latest prices.
+    Required: Ticker, Shares
+    Optional: Classification
     """
     st.subheader("📤 Upload Your Portfolio CSV")
-    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], key=key)  # <-- key is passed in
+    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], key=key)
 
     if not uploaded_file:
-        return None, None
+        return None, None, None
 
     try:
         df = pd.read_csv(uploaded_file)
         required_cols = {"Ticker", "Shares"}
         if not required_cols.issubset(set(df.columns)):
             st.error("❌ CSV must contain at least 'Ticker' and 'Shares' columns.")
-            return None, None
+            return None, None, None
 
         df["Ticker"] = df["Ticker"].astype(str).str.upper()
         df["Shares"] = pd.to_numeric(df["Shares"], errors="coerce")
@@ -45,11 +45,19 @@ def load_portfolio_from_csv(key="portfolio_csv"):
         df["Weight"] = df["Market Value"] / total_value
 
         st.success("✅ Portfolio loaded and weights calculated.")
-        st.dataframe(df[["Ticker", "Shares", "Latest Price", "Market Value", "Weight"]].round(4))
+        
+        display_cols = ["Ticker", "Shares", "Latest Price", "Market Value", "Weight"]
+        if "Classification" in df.columns:
+            display_cols.append("Classification")
+
+        st.dataframe(df[display_cols].round(4))
+
         df = df.drop_duplicates(subset=["Ticker"])
         df["Weight"] = pd.to_numeric(df["Weight"], errors="coerce")
-        return df, df.set_index("Ticker")["Weight"]
+
+        classifications = df.set_index("Ticker")["Classification"] if "Classification" in df.columns else None
+        return df, df.set_index("Ticker")["Weight"], classifications
 
     except Exception as e:
         st.error(f"❌ Failed to process CSV: {e}")
-        return None, None
+        return None, None, None
