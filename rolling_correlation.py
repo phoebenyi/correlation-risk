@@ -1,5 +1,5 @@
 import streamlit as st
-
+import matplotlib.pyplot as plt
 
 def display_rolling_correlation_viewer(returns, tickers):
     st.subheader("🔁 Rolling Correlation Viewer")
@@ -12,6 +12,17 @@ def display_rolling_correlation_viewer(returns, tickers):
         try:
             aligned = returns[[t1, t2]].dropna()
             roll_corr = aligned[t1].rolling(window).corr(aligned[t2])
-            st.line_chart(roll_corr.dropna())
+            roll_corr = roll_corr.dropna()
+
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.plot(roll_corr.index, roll_corr, label=f"{t1} vs {t2} ({window}d)", color="blue")
+            ax.axhline(0, color='gray', linestyle='--', linewidth=1)
+            ax.axhline(1, color='black', linestyle=':', linewidth=0.5)
+            ax.axhline(-1, color='black', linestyle=':', linewidth=0.5)
+            ax.set_ylim(-1, 1)
+            ax.set_ylabel("Correlation")
+            ax.set_title(f"Rolling Correlation ({window}-day): {t1} vs {t2}")
+            ax.legend()
+            st.pyplot(fig)
         except Exception as e:
             st.error(f"Rolling correlation failed: {e}")
