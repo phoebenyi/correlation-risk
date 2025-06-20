@@ -2,7 +2,6 @@ import streamlit as st
 from supabase import create_client
 import pandas as pd
 import yfinance as yf
-# import seaborn as sns
 import matplotlib.pyplot as plt
 import io
 import plotly.express as px
