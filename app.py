@@ -32,140 +32,207 @@ from risk_analysis import (
 )
 
 from risk_display import display_risk_and_optimization
+
+from covariance_analysis import compute_covariance_matrix, plot_covariance_heatmap
+
+from antifragility_analysis import compute_antifragility_scores, display_antifragility_table
+
 import datetime
 
 def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights):
-                # Price Visuals
-                display_raw_price_data(df)
-                offer_price_data_download(df)
-                display_normalized_price_data(df_norm)
+    # Price Visuals
+    display_raw_price_data(df)
+    offer_price_data_download(df)
+    display_normalized_price_data(df_norm)
 
-                # Correlation Matrix
-                st.subheader("📍 Key Correlation Highlights")
-                corr_type = st.session_state.get("corr_type", "Pearson")
-                corr = compute_pairwise_correlation(returns, method=corr_type)
-                st.session_state["corr"] = corr
-                corr_flat = flatten_correlation_matrix(corr)
-                top_pos, top_neg, strong_corr = get_top_correlations(corr_flat)
+    # Correlation Matrix
+    tabs = st.tabs(["📊 Correlation", "📉 Covariance Matrix", "🧬 Antifragility Analysis"])
 
-                st.markdown("### 🔝 Top 5 Positively Correlated Pairs")
-                st.dataframe(top_pos.reset_index(drop=True).round(3))
+    with tabs[0]:
+        st.subheader("📍 Key Correlation Highlights")
+        corr_type = st.session_state.get("corr_type", "Pearson")
+        corr = compute_pairwise_correlation(returns, method=corr_type)
+        st.session_state["corr"] = corr
+        corr_flat = flatten_correlation_matrix(corr)
+        top_pos, top_neg, strong_corr = get_top_correlations(corr_flat)
 
-                st.markdown("### 🔻 Top 5 Negatively Correlated Pairs")
-                st.dataframe(top_neg.reset_index(drop=True).round(3))
+        st.markdown("### 🔝 Top 5 Positively Correlated Pairs")
+        st.dataframe(top_pos.reset_index(drop=True).round(3))
 
-                st.markdown("### ⚠️ Pairs with |Correlation| > 0.8")
-                st.dataframe(strong_corr.reset_index(drop=True).round(3))
+        st.markdown("### 🔻 Top 5 Negatively Correlated Pairs")
+        st.dataframe(top_neg.reset_index(drop=True).round(3))
 
-                st.subheader(f"📌 {corr_type} Correlation Matrix")
-                fig = plot_correlation_heatmap(corr, corr_type)
-                st.plotly_chart(fig, use_container_width=True, key="correlation_heatmap_main")
+        st.markdown("### ⚠️ Pairs with |Correlation| > 0.8")
+        st.dataframe(strong_corr.reset_index(drop=True).round(3))
 
-                # Cross-Sector Correlation (TWSC-style)
-                if "portfolio_classifications" in st.session_state:
-                    class_map = st.session_state["portfolio_classifications"]
+        st.subheader(f"📌 {corr_type} Correlation Matrix")
+        fig = plot_correlation_heatmap(corr, corr_type)
+        st.plotly_chart(fig, use_container_width=True, key="correlation_heatmap_main")
 
-                    if class_map is not None:
-                        st.subheader("🧠 Thematic / Sector Correlation Analysis (TWSC)")
+        # Cross-Sector Correlation (TWSC-style)
+        if "portfolio_classifications" in st.session_state:
+            class_map = st.session_state["portfolio_classifications"]
+            if class_map is not None:
+                st.subheader("🧠 Thematic / Sector Correlation Analysis (TWSC)")
+                tickers_with_class = [t for t in returns.columns if t in class_map.index]
+                returns_classified = returns[tickers_with_class]
+                class_map_filtered = class_map.loc[tickers_with_class]
 
-                        tickers_with_class = [t for t in returns.columns if t in class_map.index]
-                        returns_classified = returns[tickers_with_class]
-                        class_map_filtered = class_map.loc[tickers_with_class]
+                corr = compute_pairwise_correlation(returns_classified)
+                corr_values = corr.stack().reset_index()
+                corr_values.columns = ["Ticker A", "Ticker B", "Correlation"]
+                corr_values["Class A"] = corr_values["Ticker A"].map(class_map_filtered)
+                corr_values["Class B"] = corr_values["Ticker B"].map(class_map_filtered)
+                corr_values = corr_values[corr_values["Ticker A"] != corr_values["Ticker B"]]
 
-                        corr = compute_pairwise_correlation(returns_classified)
-                        corr_values = corr.stack().reset_index()
-                        corr_values.columns = ["Ticker A", "Ticker B", "Correlation"]
-                        corr_values["Class A"] = corr_values["Ticker A"].map(class_map_filtered)
-                        corr_values["Class B"] = corr_values["Ticker B"].map(class_map_filtered)
+                grouped_corr = corr_values.groupby(["Class A", "Class B"])["Correlation"].mean().unstack().round(2)
+                st.markdown("### 🧾 Average Correlation Between Groups")
+                st.dataframe(grouped_corr.fillna("-"))
 
-                        # Filter for A ≠ B
-                        corr_values = corr_values[corr_values["Ticker A"] != corr_values["Ticker B"]]
+                try:
+                    fig = px.imshow(
+                        grouped_corr,
+                        text_auto=True,
+                        title="Cross-Group Correlation Heatmap (TWSC)",
+                        color_continuous_scale="RdBu_r"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.warning(f"Failed to render sector heatmap: {e}")
 
-                        # Group-to-Group Average Correlation Table
-                        grouped_corr = corr_values.groupby(["Class A", "Class B"])["Correlation"].mean().unstack().round(2)
-                        st.markdown("### 🧾 Average Correlation Between Groups")
-                        st.dataframe(grouped_corr.fillna("-"))
+        display_rolling_correlation_viewer(returns, tickers)
 
-                        # Heatmap
-                        try:
-                            fig = px.imshow(
-                                grouped_corr,
-                                text_auto=True,
-                                title="Cross-Group Correlation Heatmap (TWSC)",
-                                color_continuous_scale="RdBu_r"
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                        except Exception as e:
-                            st.warning(f"Failed to render sector heatmap: {e}")
+    with tabs[1]:
+        st.subheader("📉 Covariance Matrix")
+        try:
+            cov_matrix = compute_covariance_matrix(returns)
+            st.dataframe(cov_matrix.round(4))
 
-                # Rolling Correlation Viewer
-                display_rolling_correlation_viewer(returns, tickers)
+            buffer_cov = io.StringIO()
+            cov_matrix.to_csv(buffer_cov)
+            st.download_button("⬇️ Download Covariance Matrix", buffer_cov.getvalue(), "covariance_matrix.csv", "text/csv")
 
-                # Risk & Optimization
-                if riskfolio_available and len(tickers) > 1:
-                    returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
-                    if returns_clean.shape[1] >= 2 and returns_clean.shape[0] >= 3:
-                        display_risk_and_optimization(returns_clean, start, end, portfolio_weights)
-                        st.subheader("🕰️ Portfolio Comparison: Today vs 3 Months Ago")
+            plot_covariance_heatmap(cov_matrix)
+        except Exception as e:
+            st.warning(f"Failed to compute covariance matrix: {e}")
 
-                        if portfolio_weights is not None:
-                            try:
-                                three_months_ago = pd.to_datetime(end) - pd.DateOffset(months=3)
-                                returns.index = pd.to_datetime(returns.index)
-                                recent_returns = returns[returns.index >= three_months_ago]
-                                old_returns = returns[returns.index < three_months_ago]
+    with tabs[2]:
+        st.subheader("🧬 Antifragility Analysis")
+        try:
+            scores_df = compute_antifragility_scores(returns)
+            st.caption("🔍 Antifragility Score = - (correlation × downside capture). Higher = more resilient to drawdowns.")
+            st.dataframe(scores_df.style.highlight_max(axis=0).format("{:.2f}"))
 
-                                def get_portfolio_stats(ret_data, weights):
-                                    port_ret = ret_data.dot(weights)
-                                    if port_ret.empty:
-                                        return {
-                                            "Cumulative Return": np.nan,
-                                            "Std Dev": np.nan,
-                                            "VaR (95%)": np.nan,
-                                            "CVaR (95%)": np.nan,
-                                            "Sharpe": np.nan,
-                                            "Median Return": np.nan
-                                        }
-                                    cumret = (1 + port_ret).cumprod()
-                                    std = port_ret.std() * np.sqrt(252)
-                                    var = np.percentile(port_ret, 5)
-                                    cvar = port_ret[port_ret <= var].mean()
-                                    sharpe = port_ret.mean() / port_ret.std() * np.sqrt(252)
-                                    median = np.median(port_ret)
-                                    return {
-                                        "Cumulative Return": cumret.iloc[-1],
-                                        "Std Dev": std,
-                                        "VaR (95%)": var,
-                                        "CVaR (95%)": cvar,
-                                        "Sharpe": sharpe,
-                                        "Median Return": median
-                                    }
+            buffer_anti = io.StringIO()
+            scores_df.to_csv(buffer_anti)
+            st.download_button("⬇️ Download Antifragility Scores", buffer_anti.getvalue(), "antifragility_scores.csv", "text/csv")
+        except Exception as e:
+            st.warning(f"Failed to compute antifragility scores: {e}")
 
-                                today_stats = get_portfolio_stats(recent_returns, portfolio_weights)
-                                past_stats = get_portfolio_stats(old_returns, portfolio_weights)
+    # Risk & Optimization
+    st.markdown("---")
+    st.subheader("🧮 Risk & Optimization Metrics")
+    if riskfolio_available and len(tickers) > 1:
+        returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
+        if returns_clean.shape[1] >= 2 and returns_clean.shape[0] >= 3:
+            display_risk_and_optimization(returns_clean, start, end, portfolio_weights)
+            st.subheader("🕰️ Portfolio Comparison: Today vs 3 Months Ago")
 
-                                stats_df = pd.DataFrame([past_stats, today_stats], index=["3 Months Ago", "Today"]).T
-                                st.dataframe(stats_df.round(4))
+            # Get weights: from uploaded CSV or fallback to editable UI weights
+            weights_source = portfolio_weights
 
-                                chart_df = pd.DataFrame({
-                                    "Today": (1 + recent_returns.dot(portfolio_weights)).cumprod(),
-                                    "3 Months Ago": (1 + old_returns.dot(portfolio_weights)).cumprod()
-                                }).dropna()
+            # fallback to UI-edited weights if available
+            if weights_source is None and "editable_weights" in st.session_state:
+                df_ui = st.session_state["editable_weights"]
+                if isinstance(df_ui, pd.DataFrame) and {"Ticker", "Weight"}.issubset(df_ui.columns):
+                    weights_source = pd.Series(df_ui["Weight"].values, index=df_ui["Ticker"]).dropna()
 
-                                # Normalize both to start at 100
-                                if not chart_df.empty:
-                                    chart_df = chart_df / chart_df.iloc[0] * 100
-                                    st.line_chart(chart_df)
-                                else:
-                                    st.warning("📉 Not enough data to compare performance over time.")
+            # fallback to equal weight if still None and tickers exist
+            if weights_source is None and tickers and len(tickers) >= 2:
+                equal_w = pd.Series([1/len(tickers)] * len(tickers), index=tickers)
+                weights_source = equal_w
+                if "editable_weights" not in st.session_state:
+                    st.session_state["editable_weights"] = pd.DataFrame({
+                        "Ticker": equal_w.index,
+                        "Weight": equal_w.values
+                    })
 
-                            except Exception as e:
-                                st.warning(f"❌ Failed to compute historical comparison: {e}")
+            if weights_source is not None:
+                try:
+                    comparison_window = st.selectbox("Comparison Window", ["1 Month", "3 Months", "6 Months", "1 Year"])
+                    window_map = {
+                        "1 Month": 21,
+                        "3 Months": 63,
+                        "6 Months": 126,
+                        "1 Year": 252
+                    }
+                    three_months_ago = pd.to_datetime(end) - pd.DateOffset(days=window_map[comparison_window])
+                    min_required_days = st.slider("Minimum days of return data required", 1, 30, 5)
+                    returns.index = pd.to_datetime(returns.index)
+
+                    aligned_weights = weights_source[weights_source.index.isin(returns.columns)]
+
+                    if len(aligned_weights) < 1:
+                        st.warning("⚠️ No overlapping tickers between weights and return data.")
                     else:
-                        st.warning("⚠️ Not enough data to compute risk metrics or optimize portfolio.")
-                elif not riskfolio_available:
-                    st.warning("Install `riskfolio-lib` to enable risk metrics and optimization.")
+                        recent_returns = returns[returns.index >= three_months_ago]
+                        old_returns = returns[returns.index < three_months_ago]
 
+                        def get_portfolio_stats(ret_data, weights):
+                            ret_data = ret_data[weights.index]
+                            port_ret = ret_data.dot(weights)
+                            if port_ret.dropna().shape[0] < min_required_days:
+                                return None
+                            cumret = (1 + port_ret).cumprod()
+                            return {
+                                "Cumulative Return": cumret.iloc[-1] if not cumret.empty else np.nan,
+                                "Std Dev": port_ret.std() * np.sqrt(252),
+                                "VaR (95%)": np.percentile(port_ret, 5),
+                                "CVaR (95%)": port_ret[port_ret <= np.percentile(port_ret, 5)].mean(),
+                                "Sharpe": port_ret.mean() / port_ret.std() * np.sqrt(252),
+                                "Median Return": np.median(port_ret)
+                            }
+
+                        today_stats = get_portfolio_stats(recent_returns, aligned_weights)
+                        past_stats = get_portfolio_stats(old_returns, aligned_weights)
+
+                        if today_stats and past_stats:
+                            stats_df = pd.DataFrame([past_stats, today_stats], index=["3 Months Ago", "Today"]).T
+                            st.dataframe(stats_df.round(4))
+
+                            st.write("🔍 aligned_weights:", aligned_weights)
+                            st.write("📆 recent_returns shape:", recent_returns.shape)
+                            st.write("📆 old_returns shape:", old_returns.shape)
+                            st.write("✅ recent dot product:", (recent_returns[aligned_weights.index].dot(aligned_weights)).shape)
+                            st.write("✅ old dot product:", (old_returns[aligned_weights.index].dot(aligned_weights)).shape)
+
+                            recent_cum = (1 + recent_returns[aligned_weights.index].dot(aligned_weights)).cumprod()
+                            old_cum = (1 + old_returns[aligned_weights.index].dot(aligned_weights)).cumprod()
+
+                            st.write("📈 recent_cum head:", recent_cum.head())
+                            st.write("📈 old_cum head:", old_cum.head())
+                            # Align on common dates before creating the chart
+                            common_idx = recent_cum.index.intersection(old_cum.index)
+
+                            if len(common_idx) >= 2:
+                                chart_df = pd.DataFrame({
+                                    "Today": recent_cum.loc[common_idx],
+                                    "3 Months Ago": old_cum.loc[common_idx]
+                                })
+                                chart_df = chart_df / chart_df.iloc[0] * 100
+                                st.line_chart(chart_df)
+                            elif len(common_idx) == 1:
+                                st.warning("⚠️ Only 1 common date between periods — cannot show trend.")
+                            else:
+                                st.warning("📉 No overlapping dates for comparison chart.")
+                        else:
+                            st.warning("📉 Not enough valid data to compare performance over time.")
+                except Exception as e:
+                    st.warning(f"❌ Failed to compute historical comparison: {e}")
+            else:
+                st.info("ℹ️ Upload a portfolio or edit weights above to see historical comparison.")
+    st.success("✅ Analysis complete. Explore each tab for correlation, covariance, and antifragility.")
+                        
 # Securely load from .streamlit/secrets.toml
 SUPABASE_URL = st.secrets["supabase"]["url"]
 SUPABASE_KEY = st.secrets["supabase"]["key"]
@@ -298,6 +365,9 @@ if "user" in st.session_state:
             if selected_group:
                 group_obj = group_lookup[selected_group]
                 tickers = group_obj["tickers"]
+                st.session_state["tickers"] = tickers
+                portfolio_weights = None
+                st.session_state["portfolio_weights"] = None
                 if group_obj["user_id"] == st.session_state["user"]["id"]:
                     with st.sidebar.expander("✏️ Edit/Delete Group"):
                         updated_tickers = st.text_input("Edit Tickers", ",".join(group_obj["tickers"]))
