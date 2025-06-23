@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+import numpy as np
 
 def load_portfolio_from_csv(key="portfolio_csv"):
     """
@@ -9,6 +10,11 @@ def load_portfolio_from_csv(key="portfolio_csv"):
     Optional: Classification
     """
     st.subheader("📤 Upload Your Portfolio CSV")
+
+    if "last_saved_group" in st.session_state:
+        st.success(f"✅ Group '{st.session_state['last_saved_group']}' saved successfully!")
+        del st.session_state["last_saved_group"]
+
     uploaded_file = st.file_uploader("Upload CSV file", type=["csv"], key=key)
 
     if not uploaded_file:
@@ -52,9 +58,34 @@ def load_portfolio_from_csv(key="portfolio_csv"):
 
         st.dataframe(df[display_cols].round(4))
 
+        # Save as group
+        group_name = st.text_input("💾 Name this group for future use", key="csv_group_name")
+        if group_name and st.button("Save Group to Supabase", key="save_csv_group"):
+            rows_to_insert = []
+            for _, row in df.iterrows():
+                entry = {
+                    "group_name": group_name,
+                    "ticker": row["Ticker"],
+                    "shares": float(row["Shares"]),
+                    "weight": float(row["Weight"]),
+                    "classification": row.get("Classification", None),
+                }
+                rows_to_insert.append(entry)
+
+            try:
+                from app import supabase
+
+                response = supabase.table("groups").insert(rows_to_insert).execute()
+                if response.status == 201:
+                    st.success(f"✅ Group '{group_name}' saved successfully!")
+                    st.experimental_rerun()
+                else:
+                    st.error(f"❌ Failed to save group. Status: {response.status}")
+            except Exception as e:
+                st.error(f"❌ Error saving group: {e}")
+
         df = df.drop_duplicates(subset=["Ticker"])
         df["Weight"] = pd.to_numeric(df["Weight"], errors="coerce")
-
         classifications = df.set_index("Ticker")["Classification"] if "Classification" in df.columns else None
         return df, df.set_index("Ticker")["Weight"], classifications
 

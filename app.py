@@ -337,18 +337,18 @@ if "user" in st.session_state:
                             "tickers": tickers_list
                         }).execute()
 
-                        if response.status_code == 201:
-                            st.success("✅ Group created successfully!")
-                            st.rerun()
+                        if response.data:
+                            st.session_state["last_saved_group"] = group_name
+                            st.experimental_rerun()
                         else:
-                            st.error(f"❌ Failed to create group: {response}")
+                            st.error(f"❌ Failed to save group. Response: {response}")
                     else:
                         st.warning("Please enter both a group name and ticker list.")
     
     with st.sidebar.expander("📤 Upload Your Portfolio (CSV) or Use a Group"):
         st.markdown("CSV must include **Ticker** and **Shares** columns. Example:")
         st.code("Ticker,Shares\nAAPL,50\nTSLA,30")
-        source_choice = st.radio("Choose Input Method", ["Upload CSV", "Use Group"])
+        source_choice = st.radio("Choose Input Method", ["Upload CSV", "Use Group"], key="input_method_radio")
 
         tickers = []
         portfolio_weights = None
