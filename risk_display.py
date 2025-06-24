@@ -14,17 +14,33 @@ import plotly.express as px
 from risk_analysis import compute_concentration_risk
 from risk_analysis import compute_benchmark_metrics
 
+from advanced_volatility import (
+    compute_relative_volatility_table,
+    compute_tracking_error,
+    forecast_volatility_garch,
+)
+
 def show_benchmark_metrics(portfolio_name, portfolio_returns, benchmarks, start, end, label_emoji=False):
     metrics = []
 
     for name, symbol in benchmarks.items():
+        if not isinstance(portfolio_returns.index, pd.DatetimeIndex):
+            portfolio_returns.index = pd.to_datetime(portfolio_returns.index)
         try:
-            bm_data = yf.download(symbol, start=start, end=end)["Close"].pct_change().dropna()
-            beta, corr = compute_benchmark_metrics(portfolio_returns, bm_data)
+            bm_raw = yf.download(symbol, start=start, end=end)["Close"]
+            bm_weekly = bm_raw.resample("W-FRI").last().pct_change().dropna()
+            beta, corr = compute_benchmark_metrics(portfolio_returns, bm_weekly)
 
-            aligned = pd.concat([portfolio_returns, bm_data], axis=1).dropna()
-            R_p = aligned.iloc[:, 0].mean() * 252
-            R_m = aligned.iloc[:, 1].mean() * 252
+            # Optional safety check: are we using actual returns?
+            if portfolio_returns.max() > 10:
+                st.warning(f"⚠️ Portfolio returns may not be return series. Check upstream data.")
+
+            # Ensure we're working with actual returns
+            port_weekly = portfolio_returns.resample("W-FRI").mean().dropna()
+
+            aligned = pd.concat([port_weekly, bm_weekly], axis=1).dropna()
+            R_p = (1 + aligned.iloc[:, 0]).prod() ** (52 / len(aligned)) - 1
+            R_m = (1 + aligned.iloc[:, 1]).prod() ** (52 / len(aligned)) - 1
             alpha = R_p - beta * R_m
             emoji = "🟢" if alpha > 0 else "🔴" if label_emoji else ""
 
@@ -92,6 +108,27 @@ def display_risk_and_optimization(returns_clean, start, end, portfolio_weights=N
         st.latex(r"\text{Annualized Volatility} = \text{Std Dev} \times \sqrt{\text{Periods per Year}}")
     vol_table = compute_volatility_table(returns_clean)
     st.dataframe(vol_table.reset_index().rename(columns={'index': 'Ticker'}).round(4))
+
+    with st.expander("📈 Advanced Volatility Analysis"):
+        st.markdown("Includes relative volatility, GARCH forecast, and tracking error vs benchmark.")
+
+        st.subheader("📊 Relative Volatility Ratio (Yearly Vol A / Vol B)")
+        rel_vol_table = compute_relative_volatility_table(vol_table)
+        st.dataframe(rel_vol_table.style.format("{:.2f}"))
+
+        st.subheader("🔮 5-Day GARCH Volatility Forecast")
+        garch_forecast = forecast_volatility_garch(returns_clean)
+        st.dataframe(garch_forecast.style.format("{:.2f}"))
+
+        st.subheader("📉 Tracking Error vs Benchmark")
+        benchmark_symbol = st.selectbox("Select Benchmark for Tracking Error", ["^GSPC", "^NDX", "^NYA"], index=0)
+        try:
+            bm = yf.download(benchmark_symbol, start=start, end=end)["Close"].pct_change().dropna()
+            weighted_returns = returns_clean.dot(portfolio_weights)
+            tracking_error = compute_tracking_error(weighted_returns, bm)
+            st.metric(f"Tracking Error (vs {benchmark_symbol})", f"{tracking_error:.2%}")
+        except Exception as e:
+            st.warning(f"Failed to compute tracking error: {e}")
 
     st.subheader("📆 Longitudinal Volatility (Rolling Windows)")
     with st.expander("ℹ️ What This Shows"):
@@ -317,8 +354,8 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
     st.metric("VaR (95%)", f"{opt_var:.2%}")
     st.metric("CVaR (95%)", f"{opt_cvar:.2%}")
 
-    weighted_returns = returns_clean.dot(weights)
-    cumulative_returns = (1 + weighted_returns).cumprod()
+    portfolio_daily_returns = returns_clean.dot(weights)
+    cumulative_returns = (1 + portfolio_daily_returns).cumprod()
     st.subheader("📈 Cumulative Return of Optimized Portfolio")
     st.line_chart(cumulative_returns)
 
@@ -332,8 +369,8 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
     """)
         st.markdown("Formula:")
         st.latex(r"\text{Rolling Volatility} = \text{StdDev}(R_t, \text{window}) \times \sqrt{252}")
-    roll_vol_20d = weighted_returns.rolling(20).std() * np.sqrt(252)
-    roll_vol_60d = weighted_returns.rolling(60).std() * np.sqrt(252)
+    roll_vol_20d = portfolio_daily_returns.rolling(20).std() * np.sqrt(252)
+    roll_vol_60d = portfolio_daily_returns.rolling(60).std() * np.sqrt(252)
     roll_vol_df = pd.DataFrame({
         "20d Rolling Volatility": roll_vol_20d,
         "60d Rolling Volatility": roll_vol_60d
@@ -343,7 +380,7 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
     benchmarks = {
         "Nasdaq-100": "^NDX",
         "S&P 500": "^GSPC",
-        "SNCP": "^STI"
+        "NYSE": "^NYA"
     }
 
     st.subheader("📉 Benchmark Comparison (Alpha, Beta, Correlation)")
@@ -360,14 +397,14 @@ Portfolio optimization helps determine **how much to allocate to each asset** to
         st.markdown("**• Correlation**: Measures directional co-movement with the benchmark, in range [-1, +1].")
 
     st.subheader("📊 Alpha/Beta/Correlation Table (Optimized & Uploaded Portfolios)")
-
+    st.caption("📘 Alpha and Beta are calculated using *weekly (Friday-to-Friday)* returns over the past 3 months.")
     combined_data = []
 
-    opt_metrics = show_benchmark_metrics("Optimized Portfolio", weighted_returns, benchmarks, start, end, label_emoji=True)
+    opt_metrics = show_benchmark_metrics("Optimized Portfolio", portfolio_daily_returns, benchmarks, start, end, label_emoji=True)
 
     if portfolio_weights is not None:
-        up_port_ret = returns_clean.dot(portfolio_weights)
-        up_metrics = show_benchmark_metrics("Uploaded Portfolio", up_port_ret, benchmarks, start, end, label_emoji=False)
+        uploaded_daily_returns = returns_clean.dot(portfolio_weights)
+        up_metrics = show_benchmark_metrics("Uploaded Portfolio", uploaded_daily_returns, benchmarks, start, end, label_emoji=False)
     else:
         up_metrics = []
 

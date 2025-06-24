@@ -131,11 +131,12 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
     # Risk & Optimization
     st.markdown("---")
     st.subheader("🧮 Risk & Optimization Metrics")
+
     if riskfolio_available and len(tickers) > 1:
         returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
         if returns_clean.shape[1] >= 2 and returns_clean.shape[0] >= 3:
             display_risk_and_optimization(returns_clean, start, end, portfolio_weights)
-            st.subheader("🕰️ Portfolio Comparison: Today vs 3 Months Ago")
+            st.subheader("🕰️ Portfolio Comparison: Today vs Previous Period")
 
             # Get weights: from uploaded CSV or fallback to editable UI weights
             weights_source = portfolio_weights
@@ -157,6 +158,28 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
                     })
 
             if weights_source is not None:
+                def get_portfolio_stats(ret_data, weights, min_days):
+                    ret_data = ret_data[weights.index]
+                    port_ret = ret_data.dot(weights)
+                    if port_ret.dropna().shape[0] < min_days:
+                        return None
+                    cumret = (1 + port_ret).cumprod()
+                    return {
+                        "Cumulative Return": cumret.iloc[-1] if not cumret.empty else np.nan,
+                        "Std Dev": port_ret.std() * np.sqrt(252),
+                        "VaR (95%)": np.percentile(port_ret, 5),
+                        "CVaR (95%)": port_ret[port_ret <= np.percentile(port_ret, 5)].mean(),
+                        "Sharpe": port_ret.mean() / port_ret.std() * np.sqrt(252),
+                        "Median Return": np.median(port_ret)
+                    }
+
+                def get_portfolio_series(ret_data, weights, min_days):
+                    ret_data = ret_data[weights.index]
+                    port_ret = ret_data.dot(weights)
+                    if port_ret.dropna().shape[0] < min_days:
+                        return None
+                    return (1 + port_ret).cumprod()
+
                 try:
                     comparison_window = st.selectbox("Comparison Window", ["1 Month", "3 Months", "6 Months", "1 Year"])
                     window_map = {
@@ -165,69 +188,57 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
                         "6 Months": 126,
                         "1 Year": 252
                     }
-                    three_months_ago = pd.to_datetime(end) - pd.DateOffset(days=window_map[comparison_window])
+                    lookback_days = window_map[comparison_window]
+                    cutoff_date = pd.to_datetime(end) - pd.DateOffset(days=lookback_days)
                     min_required_days = st.slider("Minimum days of return data required", 1, 30, 5)
                     returns.index = pd.to_datetime(returns.index)
-
                     aligned_weights = weights_source[weights_source.index.isin(returns.columns)]
 
                     if len(aligned_weights) < 1:
                         st.warning("⚠️ No overlapping tickers between weights and return data.")
                     else:
-                        recent_returns = returns[returns.index >= three_months_ago]
-                        old_returns = returns[returns.index < three_months_ago]
+                        recent_returns = returns[returns.index >= cutoff_date]
+                        old_returns = returns[returns.index < cutoff_date]
 
-                        def get_portfolio_stats(ret_data, weights):
-                            ret_data = ret_data[weights.index]
-                            port_ret = ret_data.dot(weights)
-                            if port_ret.dropna().shape[0] < min_required_days:
-                                return None
-                            cumret = (1 + port_ret).cumprod()
-                            return {
-                                "Cumulative Return": cumret.iloc[-1] if not cumret.empty else np.nan,
-                                "Std Dev": port_ret.std() * np.sqrt(252),
-                                "VaR (95%)": np.percentile(port_ret, 5),
-                                "CVaR (95%)": port_ret[port_ret <= np.percentile(port_ret, 5)].mean(),
-                                "Sharpe": port_ret.mean() / port_ret.std() * np.sqrt(252),
-                                "Median Return": np.median(port_ret)
-                            }
-
-                        today_stats = get_portfolio_stats(recent_returns, aligned_weights)
-                        past_stats = get_portfolio_stats(old_returns, aligned_weights)
+                        today_stats = get_portfolio_stats(recent_returns, aligned_weights, min_required_days)
+                        past_stats = get_portfolio_stats(old_returns, aligned_weights, min_required_days)
+                        recent_cum = get_portfolio_series(recent_returns, aligned_weights, min_required_days)
+                        old_cum = get_portfolio_series(old_returns, aligned_weights, min_required_days)
 
                         if today_stats and past_stats:
-                            stats_df = pd.DataFrame([past_stats, today_stats], index=["3 Months Ago", "Today"]).T
+                            stats_df = pd.DataFrame([past_stats, today_stats], index=[f"{comparison_window} Ago", "Today"]).T
                             st.dataframe(stats_df.round(4))
 
-                            st.write("🔍 aligned_weights:", aligned_weights)
-                            st.write("📆 recent_returns shape:", recent_returns.shape)
-                            st.write("📆 old_returns shape:", old_returns.shape)
-                            st.write("✅ recent dot product:", (recent_returns[aligned_weights.index].dot(aligned_weights)).shape)
-                            st.write("✅ old dot product:", (old_returns[aligned_weights.index].dot(aligned_weights)).shape)
+                            if recent_cum is not None and old_cum is not None:
+                                # Ensure both indexes are datetime64[ns] and normalized (drop timezone + time part)
+                                recent_cum.index = pd.to_datetime(recent_cum.index).normalize()
+                                old_cum.index = pd.to_datetime(old_cum.index).normalize()
 
-                            recent_cum = (1 + recent_returns[aligned_weights.index].dot(aligned_weights)).cumprod()
-                            old_cum = (1 + old_returns[aligned_weights.index].dot(aligned_weights)).cumprod()
+                                # Convert to plain date to force strict matching
+                                recent_cum.index = recent_cum.index.date
+                                old_cum.index = old_cum.index.date
 
-                            st.write("📈 recent_cum head:", recent_cum.head())
-                            st.write("📈 old_cum head:", old_cum.head())
-                            # Align on common dates before creating the chart
-                            common_idx = recent_cum.index.intersection(old_cum.index)
+                                common_idx = sorted(set(recent_cum.index).intersection(set(old_cum.index)))
 
-                            if len(common_idx) >= 2:
-                                chart_df = pd.DataFrame({
-                                    "Today": recent_cum.loc[common_idx],
-                                    "3 Months Ago": old_cum.loc[common_idx]
-                                })
-                                chart_df = chart_df / chart_df.iloc[0] * 100
-                                st.line_chart(chart_df)
-                            elif len(common_idx) == 1:
-                                st.warning("⚠️ Only 1 common date between periods — cannot show trend.")
-                            else:
-                                st.warning("📉 No overlapping dates for comparison chart.")
+                                if len(common_idx) >= 2:
+                                    aligned_recent = pd.Series(recent_cum, index=common_idx)
+                                    aligned_old = pd.Series(old_cum, index=common_idx)
+
+                                    chart_df = pd.DataFrame({
+                                        "Today": aligned_recent,
+                                        f"{comparison_window} Ago": aligned_old
+                                    }).dropna()
+
+                                    chart_df = chart_df / chart_df.iloc[0] * 100
+                                    st.line_chart(chart_df)
+                                elif len(common_idx) == 1:
+                                    st.warning("⚠️ Only one common date — cannot show trend.")
+                                else:
+                                    st.warning("📉 Still no overlapping dates found after forcing index alignment. Please check data integrity.")
                         else:
-                            st.warning("📉 Not enough valid data to compare performance over time.")
+                            st.warning("📉 Not enough return data to build comparison.")
                 except Exception as e:
-                    st.warning(f"❌ Failed to compute historical comparison: {e}")
+                    st.error(f"❌ Failed to compute portfolio comparison: {e}")
             else:
                 st.info("ℹ️ Upload a portfolio or edit weights above to see historical comparison.")
     st.success("✅ Analysis complete. Explore each tab for correlation, covariance, and antifragility.")
@@ -254,6 +265,11 @@ except ImportError:
 
 st.set_page_config(page_title="Correlation & Risk Dashboard", layout="wide")
 st.title("📈 Dynamic Stock Correlation & Risk Analysis")
+
+# ✅ Show toast if group was just saved
+if "last_saved_group" in st.session_state:
+    st.success(f"✅ Group '{st.session_state['last_saved_group']}' saved successfully!")
+    del st.session_state["last_saved_group"]
 
 # ---------------------------------------------
 # Sidebar Configuration Inputs
@@ -338,8 +354,8 @@ if "user" in st.session_state:
                         }).execute()
 
                         if response.data:
-                            st.session_state["last_saved_group"] = group_name
-                            st.experimental_rerun()
+                            st.session_state["last_saved_group"] = new_group_name
+                            st.rerun()
                         else:
                             st.error(f"❌ Failed to save group. Response: {response}")
                     else:

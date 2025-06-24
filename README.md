@@ -67,6 +67,10 @@ pip install cvxopt
 ```bash
 streamlit run app.py
 ```
+or
+```bash
+python -m streamlit run app.py
+```
 
 Then visit `http://localhost:8501`
 

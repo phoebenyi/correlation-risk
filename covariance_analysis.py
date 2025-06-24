@@ -10,12 +10,12 @@ def compute_covariance_matrix(returns_df: pd.DataFrame) -> pd.DataFrame:
 def plot_covariance_heatmap(cov_matrix: pd.DataFrame):
     try:
         fig = px.imshow(
-            cov_matrix,
-            text_auto=".2f",
-            color_continuous_scale="RdBu_r",
-            title="Covariance Matrix",
-            aspect="auto",
-        )
+        cov_matrix,
+        text_auto=".4f",
+        title="Covariance Matrix",
+        color_continuous_scale="RdBu_r",
+        aspect="auto",
+    )
         st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.warning(f"Plotly failed to render covariance heatmap: {e}")
