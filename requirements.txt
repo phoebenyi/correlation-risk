@@ -1,12 +1,12 @@
-streamlit
-yfinance
-pandas
-matplotlib
-# seaborn
-numpy
-plotly
-riskfolio-lib
-cvxopt  # Required by riskfolio-lib for optimization
-supabase
-scipy>=1.10,<1.12
-statsmodels>=0.13,<0.14
+streamlit==1.46.1
+yfinance==0.2.63
+pandas==2.3.0
+matplotlib==3.10.3
+# seaborn  # optional
+numpy==2.3.1
+plotly==6.2.0
+riskfolio-lib==7.0.1
+cvxopt==1.3.2  # Required by riskfolio-lib for optimization
+supabase==2.16.0
+scipy==1.13.0
+statsmodels==0.14.1
