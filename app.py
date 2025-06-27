@@ -30,24 +30,67 @@ from risk_analysis import (
     suggest_portfolio_tweaks,
 )
 
-from risk_display import display_risk_and_optimization
-
 from covariance_analysis import compute_covariance_matrix, plot_covariance_heatmap
 
 from antifragility_analysis import compute_antifragility_scores, display_antifragility_table
 
 import datetime
 
+def show_benchmark_metrics(label, portfolio_returns, benchmarks, start, end, label_emoji=True):
+    results = []
+    for name, ticker in benchmarks.items():
+        try:
+            bm = yf.download(ticker, start=start, end=end)["Close"]
+            bm_returns = bm.pct_change().dropna()
+            beta, corr = compute_benchmark_metrics(portfolio_returns, bm_returns)
+            alpha = portfolio_returns.mean() - bm_returns.mean()
+            results.append({
+                "Portfolio": label + (" 🟢" if alpha > 0 else " 🔴") if label_emoji else label,
+                "Benchmark": name,
+                "Alpha": round(alpha, 4),
+                "Beta": round(beta, 4),
+                "Correlation": round(corr, 4),
+                "Emoji": "🟢" if alpha > 0 else "🔴"
+            })
+        except Exception as e:
+            st.warning(f"Failed to compute metrics for benchmark {name}: {e}")
+    return results
+
+def render_concentration_metrics(portfolio_weights):
+    from risk_analysis import compute_concentration_risk
+
+    hhi, hhi_norm = compute_concentration_risk(portfolio_weights.values)
+    st.metric("Herfindahl Index (HHI)", f"{hhi:.4f}")
+    st.metric("Normalized HHI", f"{hhi_norm * 100:.2f}%")
+
 def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights):
+    returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
+    tab_labels = [
+    "📊 Prices",                          
+    "📈 Correlation",                    
+    "📉 Covariance",                     
+    "🧬 Antifragility",                  
+    "⚙️ Sharpe/Sortino Settings",        
+    "📐 Risk Metrics",                   
+    "📊 Volatility",                    
+    "🧠 Optimization",                  
+    "📈 Cumulative Returns",            
+    "🔁 Rolling Volatility",            
+    "📉 Alpha/Beta",                    
+    "📊 Concentration Risk (HHI)",      
+    "💬 Risk Suggestions"               
+    ]
+    tabs = st.tabs(tab_labels)
+    
     # Price Visuals
-    display_raw_price_data(df)
-    offer_price_data_download(df)
-    display_normalized_price_data(df_norm)
+    with tabs[0]:
+        st.subheader("📊 Raw & Normalized Price Comparison")
+        display_raw_price_data(df)
+        offer_price_data_download(df)
+        display_normalized_price_data(df_norm)
 
     # Correlation Matrix
-    tabs = st.tabs(["📊 Correlation", "📉 Covariance Matrix", "🧬 Antifragility Analysis"])
-
-    with tabs[0]:
+    with tabs[1]:
         st.subheader("📍 Key Correlation Highlights")
         corr_type = st.session_state.get("corr_type", "Pearson")
         corr = compute_pairwise_correlation(returns, method=corr_type)
@@ -101,7 +144,7 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
 
         display_rolling_correlation_viewer(returns, tickers)
 
-    with tabs[1]:
+    with tabs[2]:
         st.subheader("📉 Covariance Matrix")
         try:
             cov_matrix = compute_covariance_matrix(returns)
@@ -115,7 +158,7 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
         except Exception as e:
             st.warning(f"Failed to compute covariance matrix: {e}")
 
-    with tabs[2]:
+    with tabs[3]:
         st.subheader("🧬 Antifragility Analysis")
         try:
             scores_df = compute_antifragility_scores(returns)
@@ -128,120 +171,72 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
         except Exception as e:
             st.warning(f"Failed to compute antifragility scores: {e}")
 
-    # Risk & Optimization
-    st.markdown("---")
-    st.subheader("🧮 Risk & Optimization Metrics")
+    # Sharpe & Sortino Toggle
+    with tabs[4]:
+        st.subheader("📐 Sharpe & Sortino Settings")
+        metric_mode = st.radio("Sharpe/Sortino Mode", ["Annualized", "Monthly"], index=0)
+        scaling = np.sqrt(252) if metric_mode == "Annualized" else np.sqrt(12)
+        st.session_state["sharpe_scaling"] = scaling
 
-    if riskfolio_available and len(tickers) > 1:
-        returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
-        if returns_clean.shape[1] >= 2 and returns_clean.shape[0] >= 3:
-            display_risk_and_optimization(returns_clean, start, end, portfolio_weights)
-            st.subheader("🕰️ Portfolio Comparison: Today vs Previous Period")
+    # Risk Metrics
+    with tabs[5]:
+        from risk_display import render_risk_metrics
+        render_risk_metrics(returns_clean, scaling)
 
-            # Get weights: from uploaded CSV or fallback to editable UI weights
-            weights_source = portfolio_weights
+    # Volatility Table
+    with tabs[6]:
+        from risk_display import render_volatility_tables
+        render_volatility_tables(returns_clean)
 
-            # fallback to UI-edited weights if available
-            if weights_source is None and "editable_weights" in st.session_state:
-                df_ui = st.session_state["editable_weights"]
-                if isinstance(df_ui, pd.DataFrame) and {"Ticker", "Weight"}.issubset(df_ui.columns):
-                    weights_source = pd.Series(df_ui["Weight"].values, index=df_ui["Ticker"]).dropna()
+    # Optimization
+    with tabs[7]:
+        from risk_display import render_portfolio_optimization
+        render_portfolio_optimization(returns_clean, portfolio_weights, scaling)
 
-            # fallback to equal weight if still None and tickers exist
-            if weights_source is None and tickers and len(tickers) >= 2:
-                equal_w = pd.Series([1/len(tickers)] * len(tickers), index=tickers)
-                weights_source = equal_w
-                if "editable_weights" not in st.session_state:
-                    st.session_state["editable_weights"] = pd.DataFrame({
-                        "Ticker": equal_w.index,
-                        "Weight": equal_w.values
-                    })
+    # Cumulative Return
+    with tabs[8]:
+        from risk_display import render_return_visuals
+        render_return_visuals(returns_clean, portfolio_weights, scaling)
 
-            if weights_source is not None:
-                def get_portfolio_stats(ret_data, weights, min_days):
-                    ret_data = ret_data[weights.index]
-                    port_ret = ret_data.dot(weights)
-                    if port_ret.dropna().shape[0] < min_days:
-                        return None
-                    cumret = (1 + port_ret).cumprod()
-                    return {
-                        "Cumulative Return": cumret.iloc[-1] if not cumret.empty else np.nan,
-                        "Std Dev": port_ret.std() * np.sqrt(252),
-                        "VaR (95%)": np.percentile(port_ret, 5),
-                        "CVaR (95%)": port_ret[port_ret <= np.percentile(port_ret, 5)].mean(),
-                        "Sharpe": port_ret.mean() / port_ret.std() * np.sqrt(252),
-                        "Median Return": np.median(port_ret)
-                    }
+    # Rolling Volatility
+    with tabs[9]:
+        from risk_display import render_rolling_volatility
+        render_rolling_volatility(returns_clean, portfolio_weights)
+    
+    # Alpha/Beta/Correlation
+    with tabs[10]:
+        st.subheader("📉 Alpha/Beta/Correlation Benchmark Metrics")
+        st.caption("📘 Alpha and Beta are calculated using weekly (Friday-to-Friday) returns over the past 3 months.")
 
-                def get_portfolio_series(ret_data, weights, min_days):
-                    ret_data = ret_data[weights.index]
-                    port_ret = ret_data.dot(weights)
-                    if port_ret.dropna().shape[0] < min_days:
-                        return None
-                    return (1 + port_ret).cumprod()
+        benchmarks = {
+            "Nasdaq-100": "^NDX",
+            "S&P 500": "^GSPC",
+            "NYSE": "^NYA"
+        }
 
-                try:
-                    comparison_window = st.selectbox("Comparison Window", ["1 Month", "3 Months", "6 Months", "1 Year"])
-                    window_map = {
-                        "1 Month": 21,
-                        "3 Months": 63,
-                        "6 Months": 126,
-                        "1 Year": 252
-                    }
-                    lookback_days = window_map[comparison_window]
-                    cutoff_date = pd.to_datetime(end) - pd.DateOffset(days=lookback_days)
-                    min_required_days = st.slider("Minimum days of return data required", 1, 30, 5)
-                    returns.index = pd.to_datetime(returns.index)
-                    aligned_weights = weights_source[weights_source.index.isin(returns.columns)]
+        if portfolio_weights is not None:
+            portfolio_returns = returns_clean.dot(portfolio_weights)
+            benchmark_results = show_benchmark_metrics("Uploaded Portfolio", portfolio_returns, benchmarks, start, end)
+            if benchmark_results:
+                df_benchmark = pd.DataFrame(benchmark_results).drop(columns="Emoji")
+                st.dataframe(df_benchmark.round(4))
+                best = max(benchmark_results, key=lambda x: x["Alpha"])
+                st.success(f"🏆 Top Benchmark Outperformance: {best['Benchmark']} with Alpha = {best['Alpha']:.2%}")
 
-                    if len(aligned_weights) < 1:
-                        st.warning("⚠️ No overlapping tickers between weights and return data.")
-                    else:
-                        recent_returns = returns[returns.index >= cutoff_date]
-                        old_returns = returns[returns.index < cutoff_date]
+    with tabs[11]:
+        st.subheader("📊 Concentration Risk (HHI)")
+        if portfolio_weights is not None:
+            render_concentration_metrics(portfolio_weights)
+        else:
+            st.info("📂 No uploaded portfolio weights available for concentration analysis.")
 
-                        today_stats = get_portfolio_stats(recent_returns, aligned_weights, min_required_days)
-                        past_stats = get_portfolio_stats(old_returns, aligned_weights, min_required_days)
-                        recent_cum = get_portfolio_series(recent_returns, aligned_weights, min_required_days)
-                        old_cum = get_portfolio_series(old_returns, aligned_weights, min_required_days)
-
-                        if today_stats and past_stats:
-                            stats_df = pd.DataFrame([past_stats, today_stats], index=[f"{comparison_window} Ago", "Today"]).T
-                            st.dataframe(stats_df.round(4))
-
-                            if recent_cum is not None and old_cum is not None:
-                                # Ensure both indexes are datetime64[ns] and normalized (drop timezone + time part)
-                                recent_cum.index = pd.to_datetime(recent_cum.index).normalize()
-                                old_cum.index = pd.to_datetime(old_cum.index).normalize()
-
-                                # Convert to plain date to force strict matching
-                                recent_cum.index = recent_cum.index.date
-                                old_cum.index = old_cum.index.date
-
-                                common_idx = sorted(set(recent_cum.index).intersection(set(old_cum.index)))
-
-                                if len(common_idx) >= 2:
-                                    aligned_recent = pd.Series(recent_cum, index=common_idx)
-                                    aligned_old = pd.Series(old_cum, index=common_idx)
-
-                                    chart_df = pd.DataFrame({
-                                        "Today": aligned_recent,
-                                        f"{comparison_window} Ago": aligned_old
-                                    }).dropna()
-
-                                    chart_df = chart_df / chart_df.iloc[0] * 100
-                                    st.line_chart(chart_df)
-                                elif len(common_idx) == 1:
-                                    st.warning("⚠️ Only one common date — cannot show trend.")
-                                else:
-                                    st.warning("📉 Still no overlapping dates found after forcing index alignment. Please check data integrity.")
-                        else:
-                            st.warning("📉 Not enough return data to build comparison.")
-                except Exception as e:
-                    st.error(f"❌ Failed to compute portfolio comparison: {e}")
-            else:
-                st.info("ℹ️ Upload a portfolio or edit weights above to see historical comparison.")
-    st.success("✅ Analysis complete. Explore each tab for correlation, covariance, and antifragility.")
+    with tabs[12]:
+        st.subheader("💬 Risk Contribution Suggestions")
+        st.caption("Generated by analyzing marginal volatility and downside risk.")
+        if portfolio_weights is not None:
+            suggestions = suggest_portfolio_tweaks(portfolio_weights, returns_clean)
+            for s in suggestions:
+                st.markdown(f"- {s}")
                         
 # Securely load from .streamlit/secrets.toml
 SUPABASE_URL = st.secrets["supabase"]["url"]

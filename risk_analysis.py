@@ -6,13 +6,14 @@ import riskfolio as rp
 # -------------------------
 # 🔢 Risk Metric Calculations
 # -------------------------
-def get_risk_metrics(returns, alpha=0.05, rf=0.0):
+def get_risk_metrics(returns, alpha=0.05, rf=0.0, scaling=np.sqrt(252)):
     """
-    Computes VaR, CVaR, Sharpe Ratio, and Median Return for each asset.
-    Formulas:
+    Computes:
       - VaR_α = Percentile(returns, α)
       - CVaR_α = Mean of returns below VaR_α
-      - Sharpe = (mean - risk_free) / std * sqrt(252)
+      - Sharpe Ratio = (mean - risk_free) / std × √252
+      - Sortino Ratio = (mean - risk_free) / downside_std × √252
+      - Median return
     """
     metrics = {}
     for col in returns.columns:
@@ -21,12 +22,16 @@ def get_risk_metrics(returns, alpha=0.05, rf=0.0):
             continue
         var = np.percentile(r, 100 * alpha)
         cvar = r[r <= var].mean()
-        sharpe = (r.mean() - rf) / r.std() * np.sqrt(252)
+        std_total = r.std()
+        std_downside = r[r < rf].std()
+        sharpe = (r.mean() - rf) / std_total * scaling if std_total > 0 else np.nan
+        sortino = (r.mean() - rf) / std_downside * scaling if std_downside > 0 else np.nan
         median = np.median(r)
         metrics[col] = {
             "VaR_0.05": var,
             "CVaR_0.05": cvar,
             "Sharpe": sharpe,
+            "Sortino": sortino,
             "Median": median
         }
     return pd.DataFrame(metrics).T
