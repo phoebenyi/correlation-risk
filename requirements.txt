@@ -8,3 +8,5 @@ plotly
 riskfolio-lib
 cvxopt  # Required by riskfolio-lib for optimization
 supabase
+scipy>=1.10,<1.12
+statsmodels>=0.13,<0.14
