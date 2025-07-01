@@ -2,7 +2,7 @@ streamlit==1.46.1
 yfinance==0.2.63
 pandas==2.2.2
 matplotlib==3.8.4
-numpy==2.2.0
+numpy==2.2.0          
 scipy==1.13.1
 statsmodels==0.14.1
 plotly==6.2.0
