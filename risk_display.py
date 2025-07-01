@@ -90,7 +90,8 @@ def render_return_visuals(returns_clean, portfolio_weights, scaling):
     opt_cumret = (1 + opt_returns).cumprod()
 
     if portfolio_weights is not None:
-        up_returns = returns_clean.dot(portfolio_weights)
+        uploaded_weights_aligned = portfolio_weights.reindex(returns_clean.columns).fillna(0)
+        up_returns = returns_clean.dot(uploaded_weights_aligned)
         up_cumret = (1 + up_returns).cumprod()
         st.line_chart(pd.DataFrame({
             "Uploaded": up_cumret,

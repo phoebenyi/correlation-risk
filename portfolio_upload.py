@@ -67,7 +67,7 @@ def load_portfolio_from_csv(key="portfolio_csv"):
                     "group_name": group_name,
                     "ticker": row["Ticker"],
                     "shares": float(row["Shares"]),
-                    "weight": float(row["Weight"]),
+                    "weight": float(row["Weight"].iloc[0]) if isinstance(row["Weight"], pd.Series) else float(row["Weight"]),
                     "classification": row.get("Classification", None),
                 }
                 rows_to_insert.append(entry)

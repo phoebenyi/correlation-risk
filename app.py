@@ -65,12 +65,13 @@ def render_concentration_metrics(portfolio_weights):
 
 def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights):
     returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
+
     tab_labels = [
     "📊 Prices",                          
     "📈 Correlation",                    
     "📉 Covariance",                     
     "🧬 Antifragility",                  
-    "⚙️ Sharpe/Sortino Settings",        
+    "⚙️ Sharpe/Sortino Ratio",        
     "📐 Risk Metrics",                   
     "📊 Volatility",                    
     "🧠 Optimization",                  
@@ -84,7 +85,6 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
     
     # Price Visuals
     with tabs[0]:
-        st.subheader("📊 Raw & Normalized Price Comparison")
         display_raw_price_data(df)
         offer_price_data_download(df)
         display_normalized_price_data(df_norm)
@@ -171,13 +171,99 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
         except Exception as e:
             st.warning(f"Failed to compute antifragility scores: {e}")
 
-    # Sharpe & Sortino Toggle
+    # Sharpe & Sortino
     with tabs[4]:
-        st.subheader("📐 Sharpe & Sortino Settings")
-        metric_mode = st.radio("Sharpe/Sortino Mode", ["Annualized", "Monthly"], index=0)
-        scaling = np.sqrt(252) if metric_mode == "Annualized" else np.sqrt(12)
-        st.session_state["sharpe_scaling"] = scaling
+        st.subheader("📐 Sharpe & Sortino Ratio")
 
+        with st.expander("ℹ️ What Are Sharpe & Sortino Ratios?"):
+            st.markdown(r"""
+        ### 🧮 **Sharpe Ratio – Total Risk-Adjusted Return**
+
+        The **Sharpe Ratio** tells you how much return you're getting for each unit of total risk:
+
+        $$
+        \text{Sharpe} = \frac{\mathbb{E}[R_p - R_f]}{\sigma_p} \times \sqrt{252}
+        $$
+
+        Where:
+
+        - $R_p$: portfolio return  
+        - $R_f$: risk-free rate (e.g., 2% annualized)  
+        - $\sigma_p$: standard deviation of portfolio return
+
+        ---
+
+        ### 🎯 **Sortino Ratio – Downside Risk-Adjusted Return**
+
+        The **Sortino Ratio** only penalizes downside risk (ignores upside volatility):
+
+        $$
+        \text{Sortino} = \frac{\mathbb{E}[R_p - R_f]}{\sigma_{\text{down}}} \times \sqrt{252}
+        $$
+
+        Where:
+
+        - $\sigma_{\text{down}}$: standard deviation of **negative** excess returns only
+
+        ---
+
+        ### ✅ **What’s a Good Ratio?**
+
+        - **Sharpe > 1.0** → Good  
+        - **Sharpe > 2.0** → Excellent  
+        - **Sharpe < 1.0** → Possibly too volatile for the return  
+        - **Sortino** is typically **higher** than Sharpe
+
+        ---
+
+        ### 🧠 **What Can You Use These For?**
+
+        - Compare portfolios on a **risk-adjusted** basis  
+        - Evaluate if your return compensates for risk  
+        - Optimize portfolio weights to improve risk-efficiency
+        """)
+
+        if portfolio_weights is not None:
+            st.download_button("📥 Export returns_clean (aligned)", returns_clean[portfolio_weights.index].to_csv(), "returns_clean_aligned.csv")
+            st.download_button("📥 Export portfolio_weights", portfolio_weights.to_csv(), "weights.csv")
+            
+        scaling_annual = np.sqrt(252)
+        scaling_monthly = np.sqrt(12)
+
+        def compute_ratios(returns, scale, risk_free_rate=0.02 / 252):
+            excess_returns = returns - risk_free_rate
+            mean_excess = excess_returns.mean()
+            std_total = returns.std()
+            std_downside = excess_returns[excess_returns < 0].std()
+            
+            sharpe = mean_excess / std_total * scale if std_total > 0 else np.nan
+            sortino = mean_excess / std_downside * scale if std_downside > 0 else np.nan
+            return sharpe, sortino
+
+        if portfolio_weights is not None:
+            uploaded_returns = returns_clean.dot(portfolio_weights)
+            sharpe_ann, sortino_ann = compute_ratios(uploaded_returns, scaling_annual)
+            sharpe_month, sortino_month = compute_ratios(uploaded_returns, scaling_monthly)
+
+            st.markdown("### 📊 Uploaded Portfolio Ratios")
+            st.metric("Sharpe (Annualized)", f"{sharpe_ann:.4f}")
+            st.metric("Sortino (Annualized)", f"{sortino_ann:.4f}")
+            st.metric("Sharpe (Monthly)", f"{sharpe_month:.4f}")
+            st.metric("Sortino (Monthly)", f"{sortino_month:.4f}")
+        else:
+            st.info("📂 No uploaded portfolio weights provided. Showing optimized ratios only.")
+            opt_weights = optimize_portfolio(returns_clean).values.flatten()
+            opt_returns = returns_clean.dot(opt_weights)
+            sharpe_ann, sortino_ann = compute_ratios(opt_returns, scaling_annual)
+            sharpe_month, sortino_month = compute_ratios(opt_returns, scaling_monthly)
+
+            st.markdown("### ⚙️ Optimized Portfolio Ratios")
+            st.metric("Sharpe (Annualized)", f"{sharpe_ann:.4f}")
+            st.metric("Sortino (Annualized)", f"{sortino_ann:.4f}")
+            st.metric("Sharpe (Monthly)", f"{sharpe_month:.4f}")
+            st.metric("Sortino (Monthly)", f"{sortino_month:.4f}")
+
+    scaling = np.sqrt(252)
     # Risk Metrics
     with tabs[5]:
         from risk_display import render_risk_metrics

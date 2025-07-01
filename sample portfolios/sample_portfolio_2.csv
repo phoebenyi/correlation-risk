@@ -6,20 +6,19 @@ ASML,575,Semiconductor Mfg
 CCJ,2700,Base Metals
 DELL,4710,Computer Hardware & Storage
 HALO,4600,Biotech
-2317.TW,29900,EMS/ODM
 HON,1190,Diversified Industrials
 005380.KS,3890,Automobiles
 ISRG,200,Medical Equipment
 2454.TW,10210,Semiconductor Devices
-META,1010,Internet Media & Services
+META,860,Internet Media & Services
 NVMI,1440,Semiconductor Mfg
-NOVO-B.CO,6730,Large Pharma
+NOVO-B.CO,7460,Large Pharma
 NVDA,2700,Semiconductor Devies
 207940.KS,336,Biotech
 005930.KS,11090,Communications Equipment
 300124.SZ,24400,Electrical Components
-300760.SZ,8000,Medical Equipment
-000660.KS,5100,Semiconductor Devices
+300760.SZ,10500,Medical Equipment
+000660.KS,5900,Semiconductor Devices
 SYK,540,Medical Devices
 6762.T,7900,Electronics Componenets
 2330.TW,29890,Semiconductor Mfg
@@ -29,3 +28,4 @@ VRTX,905,Biotech
 1810.HK,125900,Communications Equipment
 FN,600,EMS/ODM
 1211.HK,56100,Automobiles
+,,
