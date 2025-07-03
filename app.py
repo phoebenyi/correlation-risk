@@ -276,13 +276,13 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
         st.subheader("📉 Alpha/Beta/Correlation Benchmark Metrics")
         st.caption("📘 Alpha and Beta are calculated using weekly (Friday-to-Friday) returns over the past 3 months.")
 
-        benchmarks = {
+        default_benchmarks = {
             "Nasdaq-100": "^NDX",
             "S&P 500": "^GSPC",
             "NYSE": "^NYA"
         }
 
-        user_input = st.sidebar.text_input("Additional Benchmarks (Ticker:Label)", help="e.g. ^DJI:Dow, ^STI:STI")
+        user_input = st.sidebar.text_input("➕ Add Benchmarks (format: ^DJI:Dow, ^STI:STI)", key="benchmark_input")
         user_benchmarks = {}
         if user_input:
             for entry in user_input.split(","):
