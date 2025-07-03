@@ -36,25 +36,7 @@ from antifragility_analysis import compute_antifragility_scores, display_antifra
 
 import datetime
 
-def show_benchmark_metrics(label, portfolio_returns, benchmarks, start, end, label_emoji=True):
-    results = []
-    for name, ticker in benchmarks.items():
-        try:
-            bm = yf.download(ticker, start=start, end=end)["Close"]
-            bm_returns = bm.pct_change().dropna()
-            beta, corr = compute_benchmark_metrics(portfolio_returns, bm_returns)
-            alpha = portfolio_returns.mean() - bm_returns.mean()
-            results.append({
-                "Portfolio": label + (" 🟢" if alpha > 0 else " 🔴") if label_emoji else label,
-                "Benchmark": name,
-                "Alpha": round(alpha, 4),
-                "Beta": round(beta, 4),
-                "Correlation": round(corr, 4),
-                "Emoji": "🟢" if alpha > 0 else "🔴"
-            })
-        except Exception as e:
-            st.warning(f"Failed to compute metrics for benchmark {name}: {e}")
-    return results
+from risk_display import render_concentration_metrics, show_benchmark_metrics
 
 def render_concentration_metrics(portfolio_weights):
     from risk_analysis import compute_concentration_risk
