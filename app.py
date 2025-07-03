@@ -282,11 +282,21 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
             "NYSE": "^NYA"
         }
 
+        user_input = st.sidebar.text_input("Additional Benchmarks (Ticker:Label)", help="e.g. ^DJI:Dow, ^STI:STI")
+        user_benchmarks = {}
+        if user_input:
+            for entry in user_input.split(","):
+                if ":" in entry:
+                    ticker, label = entry.split(":")
+                    user_benchmarks[label.strip()] = ticker.strip()
+
+        benchmarks = {**default_benchmarks, **user_benchmarks}
+
         if portfolio_weights is not None:
             portfolio_returns = returns_clean.dot(portfolio_weights)
-            benchmark_results = show_benchmark_metrics("Uploaded Portfolio", portfolio_returns, benchmarks, start, end)
+            benchmark_results = show_benchmark_metrics(portfolio_returns, benchmarks, start, end)
             if benchmark_results:
-                df_benchmark = pd.DataFrame(benchmark_results).drop(columns="Emoji")
+                df_benchmark = pd.DataFrame(benchmark_results)
                 st.dataframe(df_benchmark.round(4))
                 best = max(benchmark_results, key=lambda x: x["Alpha"])
                 st.success(f"🏆 Top Benchmark Outperformance: {best['Benchmark']} with Alpha = {best['Alpha']:.2%}")
