@@ -147,9 +147,10 @@ def render_concentration_metrics(weights):
     st.metric("Herfindahl Index (HHI)", f"{hhi:.4f}")
     st.metric("Normalized HHI", f"{hhi_norm:.2%}")
 
-def show_benchmark_metrics(portfolio_name, portfolio_returns, benchmarks, start, end):
+def show_benchmark_metrics(portfolio_returns, benchmarks, start, end):
     import yfinance as yf
     from risk_analysis import compute_benchmark_metrics
+    import streamlit as st
 
     metrics = []
 
@@ -158,11 +159,21 @@ def show_benchmark_metrics(portfolio_name, portfolio_returns, benchmarks, start,
             bm_raw = yf.download(symbol, start=start, end=end)["Close"]
             bm_weekly = bm_raw.resample("W-FRI").last().pct_change().dropna()
 
-            # Portfolio weekly returns
             port_weekly = portfolio_returns.resample("W-FRI").mean().dropna()
+
+            # Align data
             aligned = pd.concat([port_weekly, bm_weekly], axis=1).dropna()
 
-            beta, corr = compute_benchmark_metrics(portfolio_returns, bm_weekly)
+            if st.session_state.get("debug_mode", False):
+                st.write(f"📊 {name} aligned rows: {aligned.shape[0]}")
+                st.write(f"Portfolio weekly range: {port_weekly.index.min()} to {port_weekly.index.max()}")
+                st.write(f"Benchmark weekly range: {bm_weekly.index.min()} to {bm_weekly.index.max()}")
+
+            if aligned.empty:
+                st.warning(f"⚠️ No overlap with benchmark: {name}")
+                continue
+
+            beta, corr = compute_benchmark_metrics(port_weekly, bm_weekly)
 
             R_p = (1 + aligned.iloc[:, 0]).prod() ** (52 / len(aligned)) - 1
             R_m = (1 + aligned.iloc[:, 1]).prod() ** (52 / len(aligned)) - 1
@@ -177,6 +188,75 @@ def show_benchmark_metrics(portfolio_name, portfolio_returns, benchmarks, start,
             })
 
         except Exception as e:
-            st.warning(f"⚠️ Failed to fetch benchmark {name} for {portfolio_name}: {e}")
+            st.warning(f"❌ Failed to process {name}: {e}")
 
     return metrics
+
+def render_relative_volatility_table(returns_clean):
+    from advanced_volatility import compute_volatility_table, compute_relative_volatility_table
+    st.subheader("🔁 Relative Volatility Matrix (A/B Ratio of Yearly Volatility)")
+    vol_table = compute_volatility_table(returns_clean)
+    rel_vol_df = compute_relative_volatility_table(vol_table)
+    st.dataframe(rel_vol_df)
+
+def render_return_histogram(returns_clean, portfolio_weights):
+    st.subheader("📊 Portfolio Return Histogram")
+    import plotly.express as px
+
+    if portfolio_weights is not None:
+        port_returns = returns_clean.dot(portfolio_weights)
+        label = "Uploaded Portfolio"
+    else:
+        opt_weights = optimize_portfolio(returns_clean).values.flatten()
+        port_returns = returns_clean.dot(opt_weights)
+        label = "Optimized Portfolio"
+
+    fig = px.histogram(port_returns, nbins=50, title=f"{label} Return Distribution", marginal="rug")
+    st.plotly_chart(fig, use_container_width=True)
+
+def render_tracking_error(returns_clean, portfolio_weights, benchmark_symbol="^GSPC"):
+    st.subheader("📉 Tracking Error vs Benchmark")
+
+    import yfinance as yf
+    from advanced_volatility import compute_tracking_error
+
+    try:
+        benchmark = yf.download(benchmark_symbol, start=returns_clean.index.min(), end=returns_clean.index.max())["Close"]
+        benchmark_returns = benchmark.pct_change().dropna()
+
+        if portfolio_weights is not None:
+            port_returns = returns_clean.dot(portfolio_weights)
+        else:
+            opt_weights = optimize_portfolio(returns_clean).values.flatten()
+            port_returns = returns_clean.dot(opt_weights)
+
+        te = compute_tracking_error(port_returns, benchmark_returns)
+        st.metric("Tracking Error", f"{te:.4%}")
+    except Exception as e:
+        st.warning(f"Failed to compute tracking error: {e}")
+
+def render_garch_volatility_forecast(returns_clean):
+    st.subheader("🔮 GARCH 5-Day Volatility Forecast")
+    from advanced_volatility import forecast_volatility_garch
+    forecast_df = forecast_volatility_garch(returns_clean)
+    st.dataframe(forecast_df)
+
+def render_risk_summary_table(returns_clean, portfolio_weights, scaling):
+    st.subheader("🧠 Risk Summary Table")
+
+    if portfolio_weights is not None:
+        port_returns = returns_clean.dot(portfolio_weights)
+        label = "Uploaded"
+    else:
+        opt_weights = optimize_portfolio(returns_clean).values.flatten()
+        port_returns = returns_clean.dot(opt_weights)
+        label = "Optimized"
+
+    summary = get_portfolio_metric_summary(port_returns, label, scaling)
+    st.table(pd.DataFrame([summary]))
+
+def render_longitudinal_volatility_table(returns_clean):
+    from risk_analysis import compute_longitudinal_volatility
+    st.subheader("🕰️ Volatility Evolution (3m, 6m, 1y)")
+    df = compute_longitudinal_volatility(returns_clean)
+    st.dataframe(df)

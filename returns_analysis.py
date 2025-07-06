@@ -5,8 +5,14 @@ def compute_returns(df, freq="Daily", return_type="% Change (Relative)", overlap
     """
     Computes return matrix based on frequency and return type.
     """
+
     if freq == "Daily":
-        returns = df.pct_change() if return_type == "% Change (Relative)" else df.diff()
+        if return_type == "% Change (Relative)":
+            returns = df.pct_change()
+        else:
+            returns = df.diff()
+
+        returns = returns.replace([float("inf"), float("-inf")], pd.NA)
         returns = returns.dropna(how="all")
 
     elif freq == "Monthly":
@@ -30,6 +36,7 @@ def compute_returns(df, freq="Daily", return_type="% Change (Relative)", overlap
                 returns = yearly_prices.diff()
 
     returns.columns = df.columns
+    returns = returns.loc[:, returns.count() >= 100]
     return returns
 
 

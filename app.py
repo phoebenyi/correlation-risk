@@ -49,21 +49,20 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
     returns_clean = returns.replace([np.inf, -np.inf], np.nan).dropna()
 
     tab_labels = [
-    "📊 Prices",                          
-    "📈 Correlation",                    
-    "📉 Covariance",                     
-    "🧬 Antifragility",                  
-    "⚙️ Sharpe/Sortino Ratio",        
-    "📐 Risk Metrics",                   
-    "📊 Volatility",                    
-    "🧠 Optimization",                  
-    "📈 Cumulative Returns",            
-    "🔁 Rolling Volatility",            
-    "📉 Alpha/Beta",                    
-    "📊 Concentration Risk (HHI)",      
-    "💬 Risk Suggestions"               
+    "📊 Prices",
+    "📈 Correlation Matrix",
+    "📉 Covariance Matrix",
+    "📉 Volatility Overview",
+    "🧮 Risk Metrics (Asset-Level)",
+    "📐 Sharpe & Sortino (Portfolio)",
+    "⚙️ Optimization & Suggestions",
+    "📊 Cumulative Returns",
+    "📉 Alpha/Beta/Tracking Error",
+    "🧬 Antifragility"
     ]
+
     tabs = st.tabs(tab_labels)
+    scaling = np.sqrt(252) # Annualization factor for daily returns
     
     # Price Visuals
     with tabs[0]:
@@ -126,89 +125,92 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
 
         display_rolling_correlation_viewer(returns, tickers)
 
+    # Covariance Matrix
     with tabs[2]:
         st.subheader("📉 Covariance Matrix")
         try:
             cov_matrix = compute_covariance_matrix(returns)
             st.dataframe(cov_matrix.round(4))
-
             buffer_cov = io.StringIO()
             cov_matrix.to_csv(buffer_cov)
             st.download_button("⬇️ Download Covariance Matrix", buffer_cov.getvalue(), "covariance_matrix.csv", "text/csv")
-
             plot_covariance_heatmap(cov_matrix)
         except Exception as e:
             st.warning(f"Failed to compute covariance matrix: {e}")
 
+    # Volatility
     with tabs[3]:
-        st.subheader("🧬 Antifragility Analysis")
-        try:
-            scores_df = compute_antifragility_scores(returns)
-            st.caption("🔍 Antifragility Score = - (correlation × downside capture). Higher = more resilient to drawdowns.")
-            st.dataframe(scores_df.style.highlight_max(axis=0).format("{:.2f}"))
+        from risk_display import (
+            render_volatility_tables,
+            render_relative_volatility_table,
+            render_rolling_volatility,
+            render_tracking_error,
+            render_longitudinal_volatility_table,
+            render_garch_volatility_forecast
+        )
+        st.subheader("📉 Volatility Overview")
+        render_volatility_tables(returns_clean)
+        render_relative_volatility_table(returns_clean)
+        render_rolling_volatility(returns_clean, portfolio_weights)
+        render_longitudinal_volatility_table(returns_clean)
+        render_garch_volatility_forecast(returns_clean)
 
-            buffer_anti = io.StringIO()
-            scores_df.to_csv(buffer_anti)
-            st.download_button("⬇️ Download Antifragility Scores", buffer_anti.getvalue(), "antifragility_scores.csv", "text/csv")
-        except Exception as e:
-            st.warning(f"Failed to compute antifragility scores: {e}")
-
-    # Sharpe & Sortino
+    # Risk Metrics
     with tabs[4]:
-        st.subheader("📐 Sharpe & Sortino Ratio")
+        from risk_display import render_risk_metrics, render_return_histogram
+        render_risk_metrics(returns_clean, scaling)
+        render_return_histogram(returns_clean, portfolio_weights)
 
-        with st.expander("ℹ️ What Are Sharpe & Sortino Ratios?"):
+    # Sharpe & Sortino Ratios
+    with tabs[5]:
+        st.subheader("📊 Sharpe & Sortino Ratios")
+
+        # ℹ️ Explanatory Section
+        with st.expander("❓ What Are Sharpe & Sortino Ratios?"):
             st.markdown(r"""
-        ### 🧮 **Sharpe Ratio – Total Risk-Adjusted Return**
+            ### 🧮 **Sharpe Ratio – Total Risk-Adjusted Return**
 
-        The **Sharpe Ratio** tells you how much return you're getting for each unit of total risk:
+            The **Sharpe Ratio** answers:
+            > “How much return am I earning per unit of total risk?”
 
-        $$
-        \text{Sharpe} = \frac{\mathbb{E}[R_p - R_f]}{\sigma_p} \times \sqrt{252}
-        $$
+            $$
+            \text{Sharpe Ratio} = \frac{ \mathbb{E}[R_p - R_f] }{ \sigma_p } \times \sqrt{252}
+            $$
 
-        Where:
+            - $R_p$: Portfolio return  
+            - $R_f$: Risk-free rate (e.g., 2%)  
+            - $\sigma_p$: Standard deviation of **all** returns  
+            - $\sqrt{252}$: Annualizes daily returns
 
-        - $R_p$: portfolio return  
-        - $R_f$: risk-free rate (e.g., 2% annualized)  
-        - $\sigma_p$: standard deviation of portfolio return
+            **Interpretation:**
+            - Sharpe > 1 → good
+            - Sharpe > 2 → excellent
+            - Sharpe < 1 → high risk for return earned
 
-        ---
+            ---
 
-        ### 🎯 **Sortino Ratio – Downside Risk-Adjusted Return**
+            ### 🎯 **Sortino Ratio – Downside Risk-Adjusted Return**
 
-        The **Sortino Ratio** only penalizes downside risk (ignores upside volatility):
+            The **Sortino Ratio** only penalizes **downside** volatility:
 
-        $$
-        \text{Sortino} = \frac{\mathbb{E}[R_p - R_f]}{\sigma_{\text{down}}} \times \sqrt{252}
-        $$
+            $$
+            \text{Sortino Ratio} = \frac{ \mathbb{E}[R_p - R_f] }{ \sigma_{\text{down}} } \times \sqrt{252}
+            $$
 
-        Where:
+            - $\sigma_{\text{down}}$: Standard deviation of **negative** excess returns only
 
-        - $\sigma_{\text{down}}$: standard deviation of **negative** excess returns only
+            **Interpretation:**
+            - Sortino is usually higher than Sharpe
+            - Focuses on “bad volatility” only
+            - Useful for capital preservation and conservative investing
 
-        ---
-
-        ### ✅ **What’s a Good Ratio?**
-
-        - **Sharpe > 1.0** → Good  
-        - **Sharpe > 2.0** → Excellent  
-        - **Sharpe < 1.0** → Possibly too volatile for the return  
-        - **Sortino** is typically **higher** than Sharpe
-
-        ---
-
-        ### 🧠 **What Can You Use These For?**
-
-        - Compare portfolios on a **risk-adjusted** basis  
-        - Evaluate if your return compensates for risk  
-        - Optimize portfolio weights to improve risk-efficiency
-        """)
+            """)
 
         if portfolio_weights is not None:
             st.download_button("📥 Export returns_clean (aligned)", returns_clean[portfolio_weights.index].to_csv(), "returns_clean_aligned.csv")
             st.download_button("📥 Export portfolio_weights", portfolio_weights.to_csv(), "weights.csv")
-            
+
+        # Actual metric calculation
         scaling_annual = np.sqrt(252)
         scaling_monthly = np.sqrt(12)
 
@@ -217,7 +219,6 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
             mean_excess = excess_returns.mean()
             std_total = returns.std()
             std_downside = excess_returns[excess_returns < 0].std()
-            
             sharpe = mean_excess / std_total * scale if std_total > 0 else np.nan
             sortino = mean_excess / std_downside * scale if std_downside > 0 else np.nan
             return sharpe, sortino
@@ -227,59 +228,56 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
             sharpe_ann, sortino_ann = compute_ratios(uploaded_returns, scaling_annual)
             sharpe_month, sortino_month = compute_ratios(uploaded_returns, scaling_monthly)
 
-            st.markdown("### 📊 Uploaded Portfolio Ratios")
+            st.markdown("### 📈 Uploaded Portfolio")
             st.metric("Sharpe (Annualized)", f"{sharpe_ann:.4f}")
             st.metric("Sortino (Annualized)", f"{sortino_ann:.4f}")
             st.metric("Sharpe (Monthly)", f"{sharpe_month:.4f}")
             st.metric("Sortino (Monthly)", f"{sortino_month:.4f}")
         else:
-            st.info("📂 No uploaded portfolio weights provided. Showing optimized ratios only.")
+            st.info("📂 No uploaded portfolio weights provided. Showing optimized portfolio metrics.")
             opt_weights = optimize_portfolio(returns_clean).values.flatten()
             opt_returns = returns_clean.dot(opt_weights)
             sharpe_ann, sortino_ann = compute_ratios(opt_returns, scaling_annual)
             sharpe_month, sortino_month = compute_ratios(opt_returns, scaling_monthly)
 
-            st.markdown("### ⚙️ Optimized Portfolio Ratios")
+            st.markdown("### ⚙️ Optimized Portfolio")
             st.metric("Sharpe (Annualized)", f"{sharpe_ann:.4f}")
             st.metric("Sortino (Annualized)", f"{sortino_ann:.4f}")
             st.metric("Sharpe (Monthly)", f"{sharpe_month:.4f}")
             st.metric("Sortino (Monthly)", f"{sortino_month:.4f}")
 
-    scaling = np.sqrt(252)
-    # Risk Metrics
-    with tabs[5]:
-        from risk_display import render_risk_metrics
-        render_risk_metrics(returns_clean, scaling)
-
-    # Volatility Table
+    # Optimization & Suggestions
     with tabs[6]:
-        from risk_display import render_volatility_tables
-        render_volatility_tables(returns_clean)
+        from risk_display import render_portfolio_optimization, render_concentration_metrics
+        st.subheader("⚙️ Optimization & Risk Suggestions")
+        st.caption("Generated by analyzing marginal volatility and downside risk.")
+        if portfolio_weights is not None:
+            st.subheader("📊 Concentration Risk (HHI)")
+            render_concentration_metrics(portfolio_weights)
+            suggestions = suggest_portfolio_tweaks(portfolio_weights, returns_clean)
+            st.markdown("### 💬 Suggestions")
+            for s in suggestions:
+                st.markdown(f"- {s}")
+        else:
+            st.info("📂 No uploaded portfolio weights available for concentration analysis.")
 
-    # Optimization
+    # Cumulative Returns
     with tabs[7]:
-        from risk_display import render_portfolio_optimization
-        render_portfolio_optimization(returns_clean, portfolio_weights, scaling)
-
-    # Cumulative Return
-    with tabs[8]:
         from risk_display import render_return_visuals
+        st.subheader("📊 Cumulative Return & Benchmark Analysis")
         render_return_visuals(returns_clean, portfolio_weights, scaling)
-
-    # Rolling Volatility
-    with tabs[9]:
-        from risk_display import render_rolling_volatility
-        render_rolling_volatility(returns_clean, portfolio_weights)
     
-    # Alpha/Beta/Correlation
-    with tabs[10]:
-        st.subheader("📉 Alpha/Beta/Correlation Benchmark Metrics")
+    # Benchmark
+    with tabs[8]:
+        from risk_display import render_tracking_error
+        st.subheader("📉 Alpha/Beta/Correlation vs Benchmark")
         st.caption("📘 Alpha and Beta are calculated using weekly (Friday-to-Friday) returns over the past 3 months.")
 
         default_benchmarks = {
-            "Nasdaq-100": "^NDX",
             "S&P 500": "^GSPC",
-            "NYSE": "^NYA"
+            "Nasdaq-100": "^NDX",
+            "Dow Jones": "^DJI",
+            "STI": "^STI"
         }
 
         user_input = st.sidebar.text_input("➕ Add Benchmarks (format: ^DJI:Dow, ^STI:STI)", key="benchmark_input")
@@ -291,30 +289,65 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
                     user_benchmarks[label.strip()] = ticker.strip()
 
         benchmarks = {**default_benchmarks, **user_benchmarks}
+        selected_benchmark_label = st.selectbox("📈 Benchmark for Tracking Error", list(benchmarks.keys()))
+        benchmark_symbol = benchmarks[selected_benchmark_label]
 
-        if portfolio_weights is not None:
-            portfolio_returns = returns_clean.dot(portfolio_weights)
-            benchmark_results = show_benchmark_metrics(portfolio_returns, benchmarks, start, end)
-            if benchmark_results:
-                df_benchmark = pd.DataFrame(benchmark_results)
-                st.dataframe(df_benchmark.round(4))
-                best = max(benchmark_results, key=lambda x: x["Alpha"])
-                st.success(f"🏆 Top Benchmark Outperformance: {best['Benchmark']} with Alpha = {best['Alpha']:.2%}")
+        st.subheader("📏 Tracking Error")
 
-    with tabs[11]:
-        st.subheader("📊 Concentration Risk (HHI)")
-        if portfolio_weights is not None:
-            render_concentration_metrics(portfolio_weights)
-        else:
-            st.info("📂 No uploaded portfolio weights available for concentration analysis.")
+        with st.expander("❓ What is Tracking Error?"):
+            st.markdown("""
+            ### 📏 Tracking Error
 
-    with tabs[12]:
-        st.subheader("💬 Risk Contribution Suggestions")
-        st.caption("Generated by analyzing marginal volatility and downside risk.")
+            Measures how closely your portfolio tracks a benchmark.
+
+            $$
+            \text{TE} = \text{std}(R_p - R_b) \times \sqrt{252}
+            $$
+
+            - $R_p$: Portfolio return  
+            - $R_b$: Benchmark return
+
+            **Low TE** → tightly follows benchmark  
+            **High TE** → deviates from benchmark  
+            """)
+
+        render_tracking_error(returns_clean, portfolio_weights, benchmark_symbol)
+
+        st.markdown("---")
+        
         if portfolio_weights is not None:
-            suggestions = suggest_portfolio_tweaks(portfolio_weights, returns_clean)
-            for s in suggestions:
-                st.markdown(f"- {s}")
+            portfolio_daily = returns_clean.dot(portfolio_weights)
+
+            if portfolio_daily.empty:
+                st.error("❌ Portfolio returns are empty!")
+            else:
+                benchmark_results = show_benchmark_metrics(portfolio_daily, benchmarks, start, end)
+                if benchmark_results:
+                    df_benchmark = pd.DataFrame(benchmark_results)
+
+                    # Handle edge case: if somehow Alpha/Beta/Correlation are NaN
+                    if df_benchmark.empty or df_benchmark[["Alpha", "Beta", "Correlation"]].isnull().all().all():
+                        st.warning("⚠️ Computed benchmark results are empty or contain only NaNs.")
+                    else:
+                        st.dataframe(df_benchmark.round(4))
+                        best = max(benchmark_results, key=lambda x: x["Alpha"])
+                        st.success(f"🏆 Top Benchmark Outperformance: {best['Benchmark']} with Alpha = {best['Alpha']:.2%}")
+                else:
+                    st.warning("⚠️ No benchmark metrics calculated. Possibly no overlapping data.")
+
+    # Antifragility Analysis
+    with tabs[9]:
+        st.subheader("🧬 Antifragility Analysis")
+        try:
+            scores_df = compute_antifragility_scores(returns)
+            st.caption("🔍 Antifragility Score = - (correlation × downside capture). Higher = more resilient to drawdowns.")
+            st.dataframe(scores_df.style.highlight_max(axis=0).format("{:.2f}"))
+
+            buffer_anti = io.StringIO()
+            scores_df.to_csv(buffer_anti)
+            st.download_button("⬇️ Download Antifragility Scores", buffer_anti.getvalue(), "antifragility_scores.csv", "text/csv")
+        except Exception as e:
+            st.warning(f"Failed to compute antifragility scores: {e}")
                         
 # Securely load from .streamlit/secrets.toml
 SUPABASE_URL = st.secrets["supabase"]["url"]
@@ -450,12 +483,65 @@ if "user" in st.session_state:
 
         elif source_choice == "Use Group":
             selected_group = st.selectbox("Select Group", group_names)
+            
             if selected_group:
                 group_obj = group_lookup[selected_group]
                 tickers = group_obj["tickers"]
                 st.session_state["tickers"] = tickers
-                portfolio_weights = None
-                st.session_state["portfolio_weights"] = None
+
+                if tickers:
+                    st.markdown("### ⚖️ Edit Weights (optional)")
+
+                    # Provide a default weight dictionary (equal weight)
+                    default_weights = {t: 1 / len(tickers) for t in tickers}
+
+                    # Use Streamlit number inputs to allow editing weights
+                    edited_weights = {}
+                    for t in tickers:
+                        edited_weights[t] = st.number_input(
+                            label=f"Weight for {t}",
+                            min_value=0.0,
+                            max_value=1.0,
+                            value=float(default_weights[t]),
+                            step=0.01,
+                            key=f"weight_input_{t}"
+                        )
+
+                    # Normalize weights to sum to 1
+                    total = sum(edited_weights.values())
+
+                    # ✅ Move the check here, after total is defined:
+                    if abs(total - 1.0) > 0.01:
+                        st.warning("Weights will be normalized to sum to 100%.")
+
+                    if total == 0:
+                        st.warning("⚠️ Total weight is 0. Please adjust weights.")
+                        portfolio_weights = None
+                        st.session_state["portfolio_weights"] = None
+                    else:
+                        normalized_weights = {t: w / total for t, w in edited_weights.items()}
+                        portfolio_weights = pd.Series(normalized_weights)
+                        st.session_state["portfolio_weights"] = portfolio_weights
+
+                        st.caption(f"🎯 Total Weight (before normalization): {total:.2f}")
+                        st.dataframe(pd.Series(normalized_weights, name="Normalized Weight").round(4))
+                    
+                    # Pie chart of weights
+                    st.markdown("📊 **Weight Allocation Pie Chart**")
+                    pie_df = pd.DataFrame({
+                        "Ticker": list(normalized_weights.keys()),
+                        "Weight": list(normalized_weights.values())
+                    })
+
+                    fig = px.pie(pie_df, values="Weight", names="Ticker", hole=0.3)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    st.markdown("📈 **Weight Allocation Bar Chart**")
+                    fig_bar = px.bar(pie_df, x="Ticker", y="Weight", text="Weight", title="Portfolio Weights")
+                    fig_bar.update_traces(texttemplate='%{text:.2%}', textposition='outside')
+                    fig_bar.update_layout(yaxis_tickformat=".0%", uniformtext_minsize=8, uniformtext_mode='hide')
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
                 if group_obj["user_id"] == st.session_state["user"]["id"]:
                     with st.sidebar.expander("✏️ Edit/Delete Group"):
                         updated_tickers = st.text_input("Edit Tickers", ",".join(group_obj["tickers"]))
