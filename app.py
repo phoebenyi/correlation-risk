@@ -128,6 +128,31 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
     # Covariance Matrix
     with tabs[2]:
         st.subheader("📉 Covariance Matrix")
+        with st.expander("❓ What Is Covariance and How to Use It?"):
+            st.markdown(r"""
+        ### 🔗 Covariance Matrix
+
+        Covariance measures **how two assets move together**.
+
+        ---
+
+        ### 🧮 Formula:
+        $$
+        \text{Cov}(X, Y) = \mathbb{E}[(X - \mu_X)(Y - \mu_Y)]
+        $$
+
+        - If positive → assets rise/fall together  
+        - If negative → one rises while the other falls  
+        - Units: %² → hard to compare across assets
+
+        ---
+
+        ### 🧠 Use It To:
+        - Build portfolios where assets don’t “move in sync”
+        - Feed into optimization models (like Markowitz MV)
+
+        ⚠️ Covariance is **scale-sensitive** → use correlation for normalized comparison
+        """)
         try:
             cov_matrix = compute_covariance_matrix(returns)
             st.dataframe(cov_matrix.round(4))
@@ -159,52 +184,131 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
     with tabs[4]:
         from risk_display import render_risk_metrics, render_return_histogram
         render_risk_metrics(returns_clean, scaling)
+        with st.expander("❓ What Does the Return Histogram Show?"):
+            st.markdown(r"""
+        ### 📊 Portfolio Return Histogram
+
+        This shows the **distribution of your daily portfolio returns**.
+
+        - Taller bars = more frequent returns in that range  
+        - Left-skewed = more negative returns  
+        - Right-skewed = more positive returns
+
+        🧠 **Use it to**:
+        - See if your returns are lopsided
+        - Validate assumptions for Sharpe/Sortino
+        """)
         render_return_histogram(returns_clean, portfolio_weights)
 
     # Sharpe & Sortino Ratios
     with tabs[5]:
         st.subheader("📊 Sharpe & Sortino Ratios")
 
-        # ℹ️ Explanatory Section
-        with st.expander("❓ What Are Sharpe & Sortino Ratios?"):
+        st.warning("⚠️ These Sharpe and Sortino values are currently **inaccurate** as daily prices are used instead of end-of-month NAVs or a dynamic risk-free rate.")
+
+        with st.expander("❓ Why Might These Numbers Be Inaccurate?"):
             st.markdown(r"""
-            ### 🧮 **Sharpe Ratio – Total Risk-Adjusted Return**
+        ### ⚠️ Accuracy Warning
 
-            The **Sharpe Ratio** answers:
-            > “How much return am I earning per unit of total risk?”
+        Sharpe and Sortino require:
+        - Proper **end-of-month portfolio returns**
+        - Accurate **risk-free rate over time**
+        - Consistent **weight alignment**
 
-            $$
-            \text{Sharpe Ratio} = \frac{ \mathbb{E}[R_p - R_f] }{ \sigma_p } \times \sqrt{252}
-            $$
+        📉 If you're uploading only raw tickers + shares:
+        - Daily returns may not match your actual portfolio behavior
+        - Static risk-free rate (0.02/252) may be unrealistic
 
-            - $R_p$: Portfolio return  
-            - $R_f$: Risk-free rate (e.g., 2%)  
-            - $\sigma_p$: Standard deviation of **all** returns  
-            - $\sqrt{252}$: Annualizes daily returns
+        ✅ For best accuracy: upload NAV-based return series.
+        """)
 
-            **Interpretation:**
-            - Sharpe > 1 → good
-            - Sharpe > 2 → excellent
-            - Sharpe < 1 → high risk for return earned
+        # ℹ️ Explanatory Section
+        with st.expander("❓ What Does the Sharpe Ratio Actually Mean?"):
+            st.markdown(r"""
+        ### 📈 Sharpe Ratio – What It Means
 
-            ---
+        The **Sharpe Ratio** answers:
 
-            ### 🎯 **Sortino Ratio – Downside Risk-Adjusted Return**
+        > “How much extra return am I earning for each unit of risk I take?”
 
-            The **Sortino Ratio** only penalizes **downside** volatility:
+        It shows how efficiently a portfolio converts **volatility into profit**, after removing the **risk-free return** (like T-bills).
 
-            $$
-            \text{Sortino Ratio} = \frac{ \mathbb{E}[R_p - R_f] }{ \sigma_{\text{down}} } \times \sqrt{252}
-            $$
+        ---
 
-            - $\sigma_{\text{down}}$: Standard deviation of **negative** excess returns only
+        ### 🧮 Formula:
+        $$
+        \text{Sharpe Ratio} = \frac{ \mathbb{E}[R_p - R_f] }{ \sigma_p } \times \sqrt{252}
+        $$
 
-            **Interpretation:**
-            - Sortino is usually higher than Sharpe
-            - Focuses on “bad volatility” only
-            - Useful for capital preservation and conservative investing
+        Where:
+        - \( R_p \): Portfolio return  
+        - \( R_f \): Risk-free rate  
+        - \( \sigma_p \): Standard deviation of portfolio returns  
+        - \( \sqrt{252} \): Annualization factor
 
-            """)
+        ---
+
+        ### 🧠 Interpretation:
+
+        | Sharpe Ratio | What It Means |
+        |--------------|----------------|
+        | > 2.0        | ✅ Excellent risk-adjusted return |
+        | 1.0 – 2.0    | 👍 Good balance of return vs. risk |
+        | < 1.0        | ⚠️ Too much risk for the return gained |
+
+        ---
+
+        ### 🛠️ How to Use It:
+        - Compare funds: **higher Sharpe = better** use of risk.
+        - Evaluate trade-offs: Is this strategy giving enough return for the volatility?
+
+        ---
+
+        ### ⚠️ Caution:
+        Sharpe penalizes all volatility — even **upside**.  
+        If you care more about protecting the downside, use **Sortino Ratio** instead.
+        """)
+            
+        with st.expander("❓ What Does the Sortino Ratio Mean?"):
+            st.markdown(r"""
+        ### 🎯 Sortino Ratio – Focused on Downside Risk
+
+        The **Sortino Ratio** answers:
+
+        > “How much excess return am I earning **per unit of downside risk**?”
+
+        Unlike Sharpe, it **ignores good (upside) volatility** and only penalizes losses.
+
+        ---
+
+        ### 🧮 Formula:
+        $$
+        \text{Sortino Ratio} = \frac{ \mathbb{E}[R_p - R_f] }{ \sigma_{\text{down}} } \times \sqrt{252}
+        $$
+
+        Where:
+        - \( R_p \): Portfolio return  
+        - \( R_f \): Risk-free rate  
+        - \( \sigma_{\text{down}} \): Std dev of negative excess returns only
+
+        ---
+
+        ### 🧠 Interpretation:
+
+        | Sortino Ratio | What It Means |
+        |---------------|----------------|
+        | > 2.0         | ✅ Excellent downside protection |
+        | 1.0–2.0       | 👍 Decent return vs. downside |
+        | < 1.0         | ⚠️ Too risky for the return gained |
+
+        ---
+
+        ### 🛠️ How to Use It:
+        - Great for conservative or retirement-focused portfolios  
+        - Compare with Sharpe:  
+        - **Sharpe high + Sortino low** = returns driven by big swings (not ideal)
+        """)
+
 
         if portfolio_weights is not None:
             st.download_button("📥 Export returns_clean (aligned)", returns_clean[portfolio_weights.index].to_csv(), "returns_clean_aligned.csv")
@@ -253,9 +357,48 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
         st.caption("Generated by analyzing marginal volatility and downside risk.")
         if portfolio_weights is not None:
             st.subheader("📊 Concentration Risk (HHI)")
+            with st.expander("❓ What Is Concentration Risk and HHI?"):
+                st.markdown(r"""
+            ### ⚖️ Herfindahl-Hirschman Index (HHI)
+
+            Measures how concentrated your portfolio is in a few names.
+
+            ---
+
+            ### 🧮 Formula:
+            $$
+            HHI = \sum_{i=1}^{n} w_i^2
+            $$
+
+            - \( w_i \) = portfolio weight of asset \( i \)  
+            - Range:  
+            - 1/n = perfectly diversified  
+            - 1 = all in one stock
+
+            ✅ Use **Normalized HHI** to scale between 0 (diversified) and 1 (concentrated)
+            """)
             render_concentration_metrics(portfolio_weights)
             suggestions = suggest_portfolio_tweaks(portfolio_weights, returns_clean)
             st.markdown("### 💬 Suggestions")
+            with st.expander("❓ How Are These Suggestions Generated?"):
+                st.markdown(r"""
+            ### 🧠 Portfolio Improvement Suggestions
+
+            We analyze:
+            - **Marginal Risk Contribution (MRC)**
+            - **Volatility**
+            - **Sharpe**
+            - **Beta**
+            - **VaR**
+            - **Concentration**
+
+            🧠 Suggestions are based on:
+            - Reallocating from **overly risky** to **under-risked** assets
+            - Lowering exposure to high-volatility or low-Sharpe assets
+            - Balancing risk contributions (not just weights)
+
+            ✅ All suggestions **preserve your asset list** — only weight tweaks.
+            """)
             for s in suggestions:
                 st.markdown(f"- {s}")
         else:
@@ -264,13 +407,156 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
     # Cumulative Returns
     with tabs[7]:
         from risk_display import render_return_visuals
-        st.subheader("📊 Cumulative Return & Benchmark Analysis")
+        with st.expander("❓ What Is Cumulative Return?"):
+            st.markdown(r"""
+        ### 📊 Cumulative Return = Total Growth Over Time
+
+        It shows:
+        - How much your portfolio (or each strategy) grew over time
+        - Compounded from daily returns:  
+        $$\text{Cumulative} = \prod_{t=1}^{T} (1 + r_t)$$
+
+        🧠 **Use it to**:
+        - Compare long-term growth
+        - Spot performance divergence from optimized portfolios
+        """)
         render_return_visuals(returns_clean, portfolio_weights, scaling)
     
     # Benchmark
     with tabs[8]:
         from risk_display import render_tracking_error
         st.subheader("📉 Alpha/Beta/Correlation vs Benchmark")
+        st.warning("⚠️ Alpha/Beta metrics may be inaccurate or misleading depending on how your portfolio data is structured.")
+
+        with st.expander("❓ Why Might These Metrics Be Inaccurate?"):
+            st.markdown(r"""
+        ### ⚠️ Alpha & Beta Accuracy Warning
+
+        Alpha and Beta are powerful — but only when based on **accurate, time-aligned return data**.
+
+        ---
+
+        #### 🧭 What They Require:
+        - Your portfolio return stream **must match the benchmark's frequency** (typically **weekly**)
+        - Enough **overlapping dates** to run a regression
+        - A **benchmark that actually reflects your investment universe**
+
+        ---
+
+        ### 🔍 Common Accuracy Issues:
+
+        ---
+
+        #### 1️⃣ Misaligned Return Frequency
+
+        The app uses the code:
+        ```python
+        portfolio_returns.resample("W-FRI").mean()
+        benchmark_returns.resample("W-FRI").last().pct_change()
+        ```
+        
+        This assumes your portfolio is **rebalanced weekly**, which may not reflect reality.
+
+        > If you're using daily prices with static weights, averaging returns to weekly can produce distorted results.
+
+        ---
+
+        #### 2️⃣ Sparse or Missing Overlap
+
+        If your portfolio return series doesn't align closely in time with the benchmark:
+        - The regression (for Beta) becomes unstable
+        - The resulting **Alpha** value may be meaningless
+
+        > For example: Alpha over 3 data points = statistically unreliable.
+
+        ---
+
+        #### 3️⃣ Benchmark Doesn’t Match Strategy
+
+        Even if your portfolio holds:
+        - Global equities
+        - Thematic ETFs
+        - Crypto-related assets
+
+        You may still be comparing to:
+        - S&P 500 (^GSPC)
+        - Nasdaq-100 (^NDX)
+
+        > This leads to **misleading Alpha/Beta values** because the benchmark isn't representative.
+
+        ---
+
+        ### ✅ Best Practices
+
+        | Issue | Fix |
+        |-------|-----|
+        | Frequency mismatch | Use returns sampled at the same frequency |
+        | Sparse data | Ensure full date alignment between portfolio & benchmark |
+        | Benchmark mismatch | Select a more relevant benchmark or construct your own |
+
+        ---
+
+        🧠 **Tip:** Upload NAV-based weekly returns if available — that gives the cleanest Alpha/Beta estimates.
+        """)
+
+
+        with st.expander("❓ Alpha, Beta, and Tracking Error Explained"):
+            st.markdown(r"""
+        ### 📉 Benchmark Risk Metrics
+
+        ---
+
+        #### 🏆 Alpha
+        Measures **excess return** vs. a benchmark.
+
+        **Formula:**
+        $$
+        \alpha = R_p - \beta \cdot R_b
+        $$
+
+        - $R_p$: Portfolio return  
+        - $R_b$: Benchmark return  
+        - $\beta$: Sensitivity to market
+
+        ✅ **Higher alpha = outperformance**
+
+        ---
+
+        #### 📈 Beta
+        Measures **sensitivity to market moves**.
+
+        **Formula:**
+        $$
+        \beta = \frac{\text{Cov}(R_p, R_b)}{\text{Var}(R_b)}
+        $$
+
+        - $\beta = 1$: Matches market  
+        - $\beta > 1$: More volatile  
+        - $\beta < 1$: Less volatile
+
+        ---
+
+        #### 📏 Tracking Error
+        Measures how closely your portfolio **tracks** the benchmark.
+
+        **Formula:**
+        $$
+        \text{TE} = \text{std}(R_p - R_b) \times \sqrt{252}
+        $$
+
+        ✅ **Lower = closer match**, higher = more active bets
+        """)
+        st.markdown("""
+        ---
+
+        ### 🛠️ How to Use These Metrics
+
+        | Metric | Meaning | Goal |
+        |--------|---------|------|
+        | Alpha | Excess return vs benchmark | ↑ Higher |
+        | Beta | Sensitivity to market moves | ~1 for passive, <1 for low risk |
+        | Tracking Error | Deviation from benchmark | ↓ Lower for passive, ↑ Higher for active |
+        """)
         st.caption("📘 Alpha and Beta are calculated using weekly (Friday-to-Friday) returns over the past 3 months.")
 
         default_benchmarks = {
@@ -338,6 +624,30 @@ def render_results(df, returns, df_norm, tickers, start, end, portfolio_weights)
     # Antifragility Analysis
     with tabs[9]:
         st.subheader("🧬 Antifragility Analysis")
+        with st.expander("❓ What Is Antifragility Score?"):
+            st.markdown(r"""
+        ### 🧬 Antifragility = Resilience During Market Stress
+
+        This score rewards:
+        - Assets that **rise when the rest fall**
+        - Or at least **fall less** during downturns
+
+        ---
+
+        ### 🧮 Formula:
+        $$
+        \text{Antifragility Score} = - (\text{Correlation to Portfolio}) \times (\text{Downside Capture})
+        $$
+
+        - **Downside capture** = how much of portfolio loss the asset absorbs  
+        $$ \text{DSC} = \frac{\text{Asset Return (when Portfolio < 0)}}{\text{Portfolio Return (when Portfolio < 0)}} $$
+
+        ---
+
+        ### 🧠 How to Use It:
+        - Rank assets by resilience
+        - Identify good hedges or diversifiers
+        """)
         try:
             scores_df = compute_antifragility_scores(returns)
             st.caption("🔍 Antifragility Score = - (correlation × downside capture). Higher = more resilient to drawdowns.")

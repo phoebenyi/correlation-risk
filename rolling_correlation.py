@@ -42,6 +42,35 @@ def display_rolling_correlation_viewer(returns, tickers):
 
     rolling_corr = rolling_corr_custom(aligned, window)
 
+    with st.expander("❓ What's the difference between the two charts above?"):
+        st.markdown(r"""
+    ### 📊 Aligned Returns vs Rolling Correlation
+
+    ---
+
+    #### 📈 **Top Chart – Aligned Daily Returns**
+    - Plots **raw daily % returns** for both tickers (e.g. NVDA and ANET).
+    - Y-axis = return (%), day by day.
+    - Shows how volatile or stable each stock is.
+
+    🧠 **Use it to**: Spot jumps, crashes, or high volatility periods.
+
+    ---
+
+    #### 🔁 **Bottom Chart – Rolling Correlation**
+    - Shows **how closely the two stocks move together** over a sliding time window (e.g. 60 days).
+    - Y-axis = correlation (from –1 to +1)
+
+    🧠 **Use it to**: Track relationship strength over time.
+
+    ---
+
+    | Chart | Shows | Correlation? |
+    |-------|-------|--------------|
+    | Aligned Returns | Raw movement | ❌ No |
+    | Rolling Correlation | Co-movement strength | ✅ Yes |
+    """)
+
     with st.expander("📈 Aligned Returns Used"):
         st.line_chart(aligned)
 
